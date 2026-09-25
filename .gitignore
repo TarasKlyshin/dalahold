@@ -1,0 +1,22 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.pem
+*.key
+*.keystore
+*.jks
+id.json
+wallet*.json
+
+# Local and generated files
+.DS_Store
+node_modules/
+.next/
+dist/
+build/
+target/
+coverage/
+*.log
