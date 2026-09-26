@@ -27,13 +27,13 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 |---|---|---|
 | 1. Exact order and one-time authority | complete, offline only | Local tests pass for replay, tampering, rotation, signer bypass and restart |
 | 2. Actual Solana transaction assembly | integrated with the offline signer only | Exact transfer assembled once, persisted and replayed after restart; decoded and verified; no broadcast |
-| 3. Web/API deal workflow | offline challenge fixture implemented; API/UI pending | Persisted deal terms and canonical challenge, then private document slots and visible mock-vs-verified states; browser interaction tests |
+| 3. Web/API deal workflow | offline challenge-to-assembly proof complete; API/UI pending | Persisted deal terms and canonical challenge, then private document slots and visible mock-vs-verified states; browser interaction tests |
 | 4. NCA verifier and NCALayer | blocked on requested SDK | Real test certificate, status and powers verification; negative tests |
 | 5. Devnet acceptance | pending | Confirmed exact test transfer and all required negative cases; no real KZT |
 
 `mvp_complete: false`
 
-`tests_passing: true` (25 offline unit/integration tests, including signer assembly, as of 2026-09-27)
+`tests_passing: true` (26 offline unit/integration tests, including deal-to-assembly proof, as of 2026-09-27)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)

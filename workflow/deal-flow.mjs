@@ -33,23 +33,37 @@ function validateTerms(terms) {
 
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
+function parseChallengeResponse(request) {
+  if (!request || typeof request !== 'object' || Array.isArray(request) ||
+      Object.keys(request).length !== 3 ||
+      ['challengeId', 'signature', 'certificateId'].some((key) => !Object.hasOwn(request, key)) ||
+      !Buffer.isBuffer(request.signature) || request.signature.length === 0 ||
+      typeof request.certificateId !== 'string' || !ID.test(request.certificateId)) {
+    throw new Error('invalid challenge response');
+  }
+  return request;
+}
+
 export class DealFlow {
   #db;
   #owners;
   #issuer;
   #signer;
+  #offlineContext;
   #now;
 
-  constructor({ dbPath, owners, issuer, signer, now = Date.now }) {
+  constructor({ dbPath, owners, issuer, signer, offlineContext, now = Date.now }) {
     if (typeof dbPath !== 'string' || !dbPath || !owners || typeof owners.owner !== 'function' ||
         !issuer || typeof issuer.issue !== 'function' ||
-        !signer || typeof signer.transfer !== 'function' || typeof now !== 'function') {
+        !signer || typeof signer.transfer !== 'function' || typeof now !== 'function' ||
+        (offlineContext !== undefined && typeof offlineContext !== 'function')) {
       throw new Error('workflow dependencies required');
     }
     this.#db = new DatabaseSync(dbPath);
     this.#owners = owners;
     this.#issuer = issuer;
     this.#signer = signer;
+    this.#offlineContext = offlineContext;
     this.#now = now;
     this.#db.exec(`
       PRAGMA foreign_keys = ON;
@@ -140,15 +154,8 @@ export class DealFlow {
     };
   }
 
-  async submitTransfer(request) {
-    if (!request || typeof request !== 'object' || Array.isArray(request) ||
-        Object.keys(request).length !== 3 ||
-        ['challengeId', 'signature', 'certificateId'].some((key) => !Object.hasOwn(request, key)) ||
-        !Buffer.isBuffer(request.signature) || request.signature.length === 0 ||
-        typeof request.certificateId !== 'string' || !ID.test(request.certificateId)) {
-      throw new Error('invalid challenge response');
-    }
-    const { challengeId, signature, certificateId } = request;
+  async #issueFor(request) {
+    const { challengeId, signature, certificateId } = parseChallengeResponse(request);
     if (!UUID.test(challengeId)) throw new Error('invalid challenge id');
     const row = this.#db.prepare('SELECT * FROM challenges WHERE challenge_id = ?').get(challengeId);
     if (!row) throw new Error('unknown challenge');
@@ -156,10 +163,45 @@ export class DealFlow {
     const grant = await this.#issuer.issue({
       orderBytes: Buffer.from(row.order_bytes), signature, certificateId,
     });
+    return { row, grant, challengeId };
+  }
+
+  async submitTransfer(request) {
+    const { row, grant, challengeId } = await this.#issueFor(request);
     const result = await this.#signer.transfer(grant.envelope);
     return {
       dealId: row.deal_id, challengeId, status: result.status,
       txId: result.tx_id, simulated: result.simulated,
+      replayed: result.replayed || grant.replayed,
+    };
+  }
+
+  // Internal-only technical proof. The trusted runtime supplies the Solana key
+  // and blockhash; neither is accepted in a browser challenge response.
+  async submitOfflineAssembly(request) {
+    if (!this.#offlineContext || typeof this.#signer.prepareOfflineTransfer !== 'function') {
+      throw new Error('offline assembly unavailable');
+    }
+    const { row, grant, challengeId } = await this.#issueFor(request);
+    const context = await this.#offlineContext({ dealId: row.deal_id, ownerId: row.owner_id });
+    if (!context || typeof context !== 'object' || Array.isArray(context) ||
+        Object.keys(context).length !== 3 ||
+        ['signerPrivateKey', 'recentBlockhash', 'lastValidBlockHeight']
+          .some((key) => !Object.hasOwn(context, key))) {
+      throw new Error('invalid offline assembly context');
+    }
+    const result = await this.#signer.prepareOfflineTransfer({
+      envelope: grant.envelope, signerPrivateKey: context.signerPrivateKey,
+      recentBlockhash: context.recentBlockhash,
+      lastValidBlockHeight: context.lastValidBlockHeight,
+    });
+    if (result.status !== 'assembled' || result.broadcast !== false ||
+        typeof result.signature !== 'string') {
+      throw new Error('invalid offline assembly result');
+    }
+    return {
+      dealId: row.deal_id, challengeId, status: 'assembled_offline',
+      transactionSignature: result.signature, broadcast: false,
       replayed: result.replayed || grant.replayed,
     };
   }
