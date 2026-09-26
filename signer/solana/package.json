@@ -1,0 +1,15 @@
+{
+  "name": "dalahold-signer-solana",
+  "private": true,
+  "description": "Offline builder for the DalaHold devnet test transfer: no RPC, no broadcast.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@solana-program/system": "0.15.0",
+    "@solana/kit": "8.3.0"
+  }
+}
