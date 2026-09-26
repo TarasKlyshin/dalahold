@@ -69,3 +69,26 @@ test('duplicate owner and malformed identifiers fail closed', (t) => {
   assert.throws(() => store.consumeNonce(owner.ownerId, 'bad:nonce/route'), /invalid nonce/);
   assert.throws(() => store.consumeNonce('unknown', 'nonce-1'), /unknown owner/);
 });
+
+test('grant reservation is durable, idempotent, and invalidated by rotation', (t) => {
+  const path = fixture(t);
+  const store = new OwnerStore(path);
+  store.registerVerifiedOwner(owner);
+  const orderHash = 'a'.repeat(64);
+  const input = { ...owner, authEpoch: 0, nonce: 'grant-1', orderHash, envelope: '{"grant":1}' };
+  assert.deepEqual(store.saveVerifiedGrant(input), { envelope: input.envelope, replayed: false });
+  assert.deepEqual(store.saveVerifiedGrant({ ...input, envelope: '{"grant":2}' }),
+    { envelope: input.envelope, replayed: true });
+  assert.throws(() => store.saveVerifiedGrant({ ...input, nonce: 'other-nonce' }), /grant conflict/);
+  assert.throws(() => store.saveVerifiedGrant({ ...input, orderHash: 'b'.repeat(64) }), /replay/);
+  store.close();
+
+  const reopened = new OwnerStore(path);
+  t.after(() => reopened.close());
+  assert.deepEqual(reopened.saveVerifiedGrant(input), { envelope: input.envelope, replayed: true });
+  reopened.rotateVerifiedCertificate({
+    ownerId: owner.ownerId, subjectId: owner.subjectId,
+    previousCertificateId: 'cert-1', newCertificateId: 'cert-2', nonce: 'rotate-1',
+  });
+  assert.throws(() => reopened.saveVerifiedGrant(input), /stale authority/);
+});

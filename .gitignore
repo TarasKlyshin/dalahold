@@ -20,3 +20,6 @@ build/
 target/
 coverage/
 *.log
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

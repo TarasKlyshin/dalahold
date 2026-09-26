@@ -31,6 +31,13 @@ export class OwnerStore {
         nonce TEXT NOT NULL,
         PRIMARY KEY (owner_id, nonce)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS issued_grants (
+        order_hash TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL REFERENCES owners(owner_id),
+        nonce TEXT NOT NULL,
+        envelope TEXT NOT NULL,
+        UNIQUE (owner_id, nonce)
+      ) STRICT;
     `);
   }
 
@@ -68,6 +75,49 @@ export class OwnerStore {
     if (!this.owner(ownerId)) throw new Error('unknown owner');
     return this.#db.prepare(`INSERT OR IGNORE INTO used_nonces (owner_id, nonce)
       VALUES (?, ?)`).run(ownerId, nonce).changes === 1;
+  }
+
+  // The caller must first verify the signature over the exact order bytes.
+  // Under one write lock, recheck the credential/epoch and reserve its nonce.
+  // Retrying the same order returns the same envelope, never a new grant ID.
+  saveVerifiedGrant({ ownerId, subjectId, certificateId, authEpoch,
+    walletAddress, nonce, orderHash, envelope }) {
+    [
+      [ownerId, 'owner id'], [subjectId, 'subject id'],
+      [certificateId, 'certificate id'], [walletAddress, 'wallet address'],
+      [nonce, 'nonce'],
+    ].forEach(([value, name]) => validId(value, name));
+    if (!Number.isSafeInteger(authEpoch) || authEpoch < 0 ||
+        !/^[a-f0-9]{64}$/.test(orderHash) ||
+        typeof envelope !== 'string' || envelope.length > 16_384) {
+      throw new Error('invalid grant');
+    }
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const owner = this.owner(ownerId);
+      if (!owner || owner.subjectId !== subjectId || owner.certificateId !== certificateId ||
+          owner.authEpoch !== authEpoch || owner.walletAddress !== walletAddress) {
+        throw new Error('stale authority');
+      }
+      const existing = this.#db.prepare('SELECT owner_id, nonce, envelope FROM issued_grants WHERE order_hash = ?')
+        .get(orderHash);
+      if (existing) {
+        if (existing.owner_id !== ownerId || existing.nonce !== nonce) {
+          throw new Error('grant conflict');
+        }
+        this.#db.exec('COMMIT');
+        return { envelope: existing.envelope, replayed: true };
+      }
+      if (this.#db.prepare(`INSERT OR IGNORE INTO used_nonces (owner_id, nonce)
+        VALUES (?, ?)`).run(ownerId, nonce).changes !== 1) throw new Error('replay');
+      this.#db.prepare(`INSERT INTO issued_grants (order_hash, owner_id, nonce, envelope)
+        VALUES (?, ?, ?, ?)`).run(orderHash, ownerId, nonce, envelope);
+      this.#db.exec('COMMIT');
+      return { envelope, replayed: false };
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   // Certificate replacement is compare-and-swap on the current credential.
