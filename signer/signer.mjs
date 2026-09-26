@@ -70,7 +70,7 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const isText = (value, pattern) => typeof value === 'string' && pattern.test(value);
 const isUint = (value) => Number.isSafeInteger(value) && value >= 0;
 
-function isAddress(value) {
+export function isAddress(value) {
   if (typeof value !== 'string' || value.length < 32 || value.length > 44) return false;
   let number = 0n;
   for (const char of value) {

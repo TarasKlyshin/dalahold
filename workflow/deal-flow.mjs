@@ -2,7 +2,7 @@
 // This is not a public API or a real EDS/payment path.
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { SYSTEM_PROGRAM_ID } from '../signer/signer.mjs';
+import { isAddress, SYSTEM_PROGRAM_ID } from '../signer/signer.mjs';
 
 const ID = /^[A-Za-z0-9:_-]{1,128}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -82,7 +82,7 @@ export class DealFlow {
     const badField = [
       ['deal id', typeof dealId !== 'string' || !ID.test(dealId)],
       ['owner id', typeof ownerId !== 'string' || !UUID.test(ownerId)],
-      ['recipient', typeof recipient !== 'string' || recipient.length < 32 || recipient.length > 44],
+      ['recipient', !isAddress(recipient)],
       ['amount', typeof testAmountLamports !== 'string' || !AMOUNT.test(testAmountLamports) ||
         BigInt(testAmountLamports) > 1_000_000n],
     ].find(([, invalid]) => invalid)?.[0];

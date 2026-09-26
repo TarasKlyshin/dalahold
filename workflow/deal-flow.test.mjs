@@ -95,6 +95,10 @@ test('challenge binds persisted terms, owner, recipient and capped test amount',
     testAmountLamports: '1000001', terms: TERMS,
   }), /invalid fixture deal/);
   assert.throws(() => fx.flow.seedFixtureDeal({
+    dealId: 'bad-address', ownerId: OWNER_ID, recipient: '0'.repeat(44),
+    testAmountLamports: '1200', terms: TERMS,
+  }), /invalid fixture deal: recipient/);
+  assert.throws(() => fx.flow.seedFixtureDeal({
     dealId: 'bad-date', ownerId: OWNER_ID, recipient: RECIPIENT,
     testAmountLamports: '1200', terms: { ...TERMS, delivery_date: '2026-02-30' },
   }), /invalid deal terms/);
