@@ -334,6 +334,7 @@ test('the HTTP surface has no other operation and serves loopback only', async (
   const body = envelope(grant());
   for (const [method, path] of [
     ['GET', '/transfers'], ['PUT', '/transfers'], ['POST', '/sign'], ['POST', '/wallets'],
+    ['POST', '/prepare'],
     ['POST', '/transfers/'], ['POST', '/transfers?raw=1'],
   ]) {
     assert.deepEqual(await call(s.port, path, body, { method }), { status: 404, body: { error: 'not_found' } });

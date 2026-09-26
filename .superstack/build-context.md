@@ -13,9 +13,10 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 - `authority/`: opaque owner ID, certificate binding, epoch, durable nonce and
   one-time grant issuance. The injected Ed25519 verifier is a **test double**,
   not an NCA verifier.
-- `signer/`: loopback grant boundary and durable replay state. Current send is
-  simulated. `signer/solana/` separately builds signed transaction bytes offline
-  from an ephemeral test key; it is not yet wired to that send boundary.
+- `signer/`: loopback grant boundary and durable replay state. The HTTP send is
+  simulated. An internal-only method now reserves a grant and uses
+  `signer/solana/` to assemble signed transaction bytes from an ephemeral test
+  key. It does not broadcast or report a network submission.
 - `prototype/`: pre-existing UX-only browser prototype, not a working backend.
 - No real NCA SDK/test certificates yet; owner has requested the SDK. No real
   certificate container, private key, password or IIN/BIN belongs in the repo.
@@ -25,14 +26,14 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 | Milestone | Status | Acceptance |
 |---|---|---|
 | 1. Exact order and one-time authority | complete, offline only | Local tests pass for replay, tampering, rotation, signer bypass and restart |
-| 2. Actual Solana transaction assembly | complete, offline only | Exact System Program transfer signed by a separate ephemeral test key; decoded and verified; no broadcast or signer integration |
+| 2. Actual Solana transaction assembly | integrated with the offline signer only | Exact transfer assembled once, persisted and replayed after restart; decoded and verified; no broadcast |
 | 3. Web/API deal workflow | offline challenge fixture implemented; API/UI pending | Persisted deal terms and canonical challenge, then private document slots and visible mock-vs-verified states; browser interaction tests |
 | 4. NCA verifier and NCALayer | blocked on requested SDK | Real test certificate, status and powers verification; negative tests |
 | 5. Devnet acceptance | pending | Confirmed exact test transfer and all required negative cases; no real KZT |
 
 `mvp_complete: false`
 
-`tests_passing: true` (20 offline unit/integration tests, including workflow and transaction encoding, as of 2026-09-26)
+`tests_passing: true` (25 offline unit/integration tests, including signer assembly, as of 2026-09-27)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)

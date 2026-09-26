@@ -90,6 +90,20 @@ function checkBlockhash(recentBlockhash) {
   return recentBlockhash;
 }
 
+async function loadSigner(signerPrivateKey) {
+  if (!(signerPrivateKey instanceof Uint8Array) || signerPrivateKey.length !== 32) {
+    throw new Error('32-byte signer private key required');
+  }
+  // Import a copy so the caller's key is never mutated or persisted.
+  const keyCopy = Uint8Array.from(signerPrivateKey);
+  try { return await createKeyPairSignerFromPrivateKeyBytes(keyCopy); }
+  finally { keyCopy.fill(0); }
+}
+
+export async function deriveOfflineSignerAddress(signerPrivateKey) {
+  return (await loadSigner(signerPrivateKey)).address;
+}
+
 /**
  * Assemble one real, signed Solana System Program transfer without broadcasting.
  * A caller must separately enforce durable grant replay and current owner epoch.
@@ -101,20 +115,13 @@ export async function buildOfflineTransfer({
 }) {
   if (!Number.isSafeInteger(now) || now < 0) throw new Error('invalid clock');
   const grant = openGrant(envelope, policyPublicKey, now);
-  if (!(signerPrivateKey instanceof Uint8Array) || signerPrivateKey.length !== 32) {
-    throw new Error('32-byte signer private key required');
-  }
   if (typeof lastValidBlockHeight !== 'bigint' || lastValidBlockHeight < 0n) {
     throw new Error('valid block height required');
   }
   checkBlockhash(recentBlockhash);
   if (SYSTEM_PROGRAM_ADDRESS !== SYSTEM_PROGRAM_ID) throw new Error('system program mismatch');
 
-  // Copy so the caller's input is never mutated; clear the copy after import.
-  const keyCopy = Uint8Array.from(signerPrivateKey);
-  let signer;
-  try { signer = await createKeyPairSignerFromPrivateKeyBytes(keyCopy); }
-  finally { keyCopy.fill(0); }
+  const signer = await loadSigner(signerPrivateKey);
   if (signer.address !== grant.wallet_address) throw new Error('signer wallet not bound to grant');
 
   const instruction = getTransferSolInstruction({

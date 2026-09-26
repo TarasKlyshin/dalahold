@@ -1,7 +1,6 @@
-// DalaHold signer boundary, milestone 1: offline only.
-// It executes nothing but exact test-transfer grants signed by the locally configured policy key
-// and hands a deterministic fake transaction ID to a caller-supplied send simulation.
-// There is no Solana private key, transaction encoding, RPC or network access in this file.
+// DalaHold signer boundary, offline only. The HTTP transfer route still hands
+// a fake transaction ID to a send simulation. A separate programmatic method
+// can assemble signed wire bytes, but it never broadcasts them or calls send.
 import { createHash, createPublicKey, verify } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -51,6 +50,22 @@ CREATE TABLE IF NOT EXISTS epochs (
   notice_payload TEXT NOT NULL,
   notice_sig TEXT NOT NULL,
   updated_at INTEGER NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS assemblies (
+  grant_id TEXT PRIMARY KEY,
+  payload_hash TEXT NOT NULL,
+  order_hash TEXT NOT NULL UNIQUE,
+  owner_id TEXT NOT NULL,
+  auth_epoch INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('reserved', 'assembled', 'cancelled')),
+  wire_bytes BLOB,
+  signature TEXT,
+  reason TEXT,
+  build_attempts INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  CHECK ((status = 'assembled' AND wire_bytes IS NOT NULL AND signature IS NOT NULL) OR
+    (status != 'assembled' AND wire_bytes IS NULL AND signature IS NULL))
 ) STRICT;`;
 
 export class Rejection extends Error {
@@ -142,10 +157,12 @@ export class Signer {
   #db;
   #sql;
   #policyKey;
+  #policyPublicKey;
   #wallets;
   #send;
   #now;
   #inflight = new Map();
+  #assemblyInflight = new Map();
 
   constructor({ dbPath, policyPublicKey, wallets, send, now = Date.now }) {
     if (decodeBase64url(policyPublicKey)?.length !== 32) {
@@ -158,6 +175,7 @@ export class Signer {
     }
     if (typeof send !== 'function') throw new TypeError('a send simulation callback is required');
     this.#policyKey = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: policyPublicKey }, format: 'jwk' });
+    this.#policyPublicKey = policyPublicKey;
     this.#wallets = bindings;
     this.#send = send;
     this.#now = now;
@@ -180,6 +198,20 @@ export class Signer {
       submitted: sql(`UPDATE transfers SET status = 'submitted', updated_at = ? WHERE grant_id = ?`),
       cancel: sql(`UPDATE transfers SET status = 'cancelled', reason = ?, updated_at = ?
         WHERE grant_id = ? AND status = 'prepared'`),
+      assembly: sql('SELECT * FROM assemblies WHERE grant_id = ?'),
+      assemblyOrderUsed: sql('SELECT 1 FROM assemblies WHERE order_hash = ?'),
+      reserveAssembly: sql(`INSERT INTO assemblies
+        (grant_id, payload_hash, order_hash, owner_id, auth_epoch, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?)`),
+      assemblyAttempt: sql(`UPDATE assemblies SET build_attempts = build_attempts + 1,
+        updated_at = ? WHERE grant_id = ? AND status = 'reserved'`),
+      assemblyComplete: sql(`UPDATE assemblies SET status = 'assembled', wire_bytes = ?, signature = ?,
+        updated_at = ? WHERE grant_id = ? AND status = 'reserved'`),
+      assemblyCancel: sql(`UPDATE assemblies SET status = 'cancelled', reason = ?, wire_bytes = NULL,
+        signature = NULL, updated_at = ? WHERE grant_id = ? AND status != 'cancelled'`),
+      assembliesStale: sql(`UPDATE assemblies SET status = 'cancelled', reason = 'stale_epoch',
+        wire_bytes = NULL, signature = NULL, updated_at = ?
+        WHERE owner_id = ? AND auth_epoch < ? AND status != 'cancelled'`),
       epoch: sql('SELECT auth_epoch FROM epochs WHERE owner_id = ?'),
       raiseEpoch: sql(`INSERT INTO epochs (owner_id, auth_epoch, notice_payload, notice_sig, updated_at)
         VALUES (?, ?, ?, ?, ?) ON CONFLICT (owner_id) DO UPDATE SET auth_epoch = excluded.auth_epoch,
@@ -219,6 +251,9 @@ export class Signer {
     checkTransferShape(grant);
     const row = this.#sql.transfer.get(grant.grant_id);
     if (row && row.payload_hash !== payloadHash) reject(409, 'grant_conflict');
+    if (this.#sql.assembly.get(grant.grant_id) || this.#sql.assemblyOrderUsed.get(grant.order_hash)) {
+      reject(409, 'order_already_assembled');
+    }
     let attempt = this.#inflight.get(grant.grant_id);
     if (!attempt) {
       if (row && row.status !== 'prepared') return outcome(row, true);
@@ -263,13 +298,106 @@ export class Signer {
     return this.#sql.transfer.get(grant.grant_id);
   }
 
+  // Internal offline proof only; deliberately absent from the HTTP routes.
+  // The policy key and wallet binding come from this signer's configuration.
+  async prepareOfflineTransfer(request) {
+    if (!hasExactKeys(request, ['envelope', 'signerPrivateKey',
+      'recentBlockhash', 'lastValidBlockHeight'])) reject(400, 'invalid_assembly_request');
+    const { envelope, signerPrivateKey, recentBlockhash, lastValidBlockHeight } = request;
+    const { value: grant, payloadHash } = openEnvelope(envelope, this.#policyKey, 'test_transfer');
+    checkTransferShape(grant);
+    // Re-derive on every call, including cached replays: possession of a valid
+    // grant alone must not retrieve already signed transaction bytes.
+    const { deriveOfflineSignerAddress } = await import('./solana/transaction-builder.mjs');
+    if (await deriveOfflineSignerAddress(signerPrivateKey) !== grant.wallet_address) {
+      reject(403, 'signer wallet not bound to grant');
+    }
+    const transfer = this.#sql.transfer.get(grant.grant_id);
+    if (transfer && transfer.payload_hash !== payloadHash) reject(409, 'grant_conflict');
+    if (transfer || this.#sql.orderUsed.get(grant.order_hash)) reject(409, 'order_already_granted');
+    const row = this.#sql.assembly.get(grant.grant_id);
+    if (row && row.payload_hash !== payloadHash) reject(409, 'grant_conflict');
+    if (!row && this.#sql.assemblyOrderUsed.get(grant.order_hash)) {
+      reject(409, 'order_already_assembled');
+    }
+    if (row?.status === 'cancelled') reject(403, row.reason);
+    const violation = this.#violation(grant);
+    if (violation) {
+      if (row) this.#sql.assemblyCancel.run(violation, this.#now(), grant.grant_id);
+      reject(403, violation);
+    }
+    if (row?.status === 'assembled') return this.#assemblyOutcome(row, true);
+    if (!row) {
+      const now = this.#now();
+      this.#sql.reserveAssembly.run(grant.grant_id, payloadHash, grant.order_hash,
+        grant.owner_id, grant.auth_epoch, now, now);
+    }
+    let attempt = this.#assemblyInflight.get(grant.grant_id);
+    const replayed = Boolean(attempt);
+    if (!attempt) {
+      this.#sql.assemblyAttempt.run(this.#now(), grant.grant_id);
+      attempt = this.#assembleOnce(grant, request).finally(() => {
+        this.#assemblyInflight.delete(grant.grant_id);
+      });
+      this.#assemblyInflight.set(grant.grant_id, attempt);
+    }
+    const assembled = await attempt;
+    const after = this.#violation(grant);
+    if (after) {
+      this.#sql.assemblyCancel.run(after, this.#now(), grant.grant_id);
+      reject(403, after);
+    }
+    return this.#assemblyOutcome(assembled, replayed);
+  }
+
+  async #assembleOnce(grant, { envelope, signerPrivateKey, recentBlockhash,
+    lastValidBlockHeight }) {
+    const { buildOfflineTransfer } = await import('./solana/transaction-builder.mjs');
+    const result = await buildOfflineTransfer({
+      envelope, policyPublicKey: this.#policyPublicKey, signerPrivateKey,
+      recentBlockhash, lastValidBlockHeight, now: this.#now(),
+    });
+    const violation = this.#violation(grant);
+    if (violation) {
+      this.#sql.assemblyCancel.run(violation, this.#now(), grant.grant_id);
+      reject(403, violation);
+    }
+    const { changes } = this.#sql.assemblyComplete.run(result.wireBytes,
+      result.signature, this.#now(), grant.grant_id);
+    if (changes !== 1) reject(403, 'assembly_cancelled');
+    return this.#sql.assembly.get(grant.grant_id);
+  }
+
+  #assemblyOutcome(row, replayed) {
+    if (row.status !== 'assembled' || !row.wire_bytes || !row.signature) {
+      reject(500, 'assembly_incomplete');
+    }
+    return {
+      grant_id: row.grant_id, order_hash: row.order_hash, status: 'assembled',
+      wireBytes: Buffer.from(row.wire_bytes), signature: row.signature,
+      broadcast: false, replayed,
+    };
+  }
+
   epoch(body) {
     const { value: notice, payloadB64, sigB64 } = openEnvelope(body, this.#policyKey, 'epoch');
     if (!isText(notice.owner_id, UUID) || !Number.isSafeInteger(notice.auth_epoch) || notice.auth_epoch < 1) {
       reject(400, 'payload_invalid');
     }
     if (!this.#wallets.has(notice.owner_id)) reject(403, 'unknown_owner');
-    const { changes } = this.#sql.raiseEpoch.run(notice.owner_id, notice.auth_epoch, payloadB64, sigB64, this.#now());
+    this.#db.exec('BEGIN IMMEDIATE');
+    let changes;
+    try {
+      ({ changes } = this.#sql.raiseEpoch.run(notice.owner_id, notice.auth_epoch,
+        payloadB64, sigB64, this.#now()));
+      if (changes > 0) {
+        this.#sql.assembliesStale.run(this.#now(), notice.owner_id, notice.auth_epoch);
+      }
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
     return { owner_id: notice.owner_id, auth_epoch: this.#epochOf(notice.owner_id), applied: changes > 0 };
   }
 }
