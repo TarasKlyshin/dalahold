@@ -29,9 +29,11 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 | 4. NCA verifier and NCALayer | blocked on requested SDK | Real test certificate, status and powers verification; negative tests |
 | 5. Devnet acceptance | pending | Confirmed exact test transfer and all required negative cases; no real KZT |
 
-`mvp_complete: false`  
-`tests_passing: true` (18 offline unit/integration tests, including workflow, as of 2026-09-26)  
-`devnet_deployed: false`  
+`mvp_complete: false`
+
+`tests_passing: true` (18 offline unit/integration tests, including workflow, as of 2026-09-26)
+
+`devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)
 
 The master plan and acceptance criteria remain in `IMPLEMENTATION_PLAN.md` and
