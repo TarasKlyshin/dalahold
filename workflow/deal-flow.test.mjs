@@ -138,6 +138,8 @@ test('tampered, revoked, powerless and expired challenges fail before send', asy
   const attempt = (value = {}) => fx.flow.submitTransfer({
     challengeId: challenge.challengeId, signature, certificateId: 'cert-1', ...value,
   });
+  await assert.rejects(attempt({ recipient: WALLET }), /invalid challenge response/);
+  await assert.rejects(attempt({ amount_lamports: '9999' }), /invalid challenge response/);
   await assert.rejects(attempt({ signature: Buffer.from('invalid') }), /identity rejected/);
   await assert.rejects(attempt({ certificateId: 'wrong-cert' }), /identity rejected/);
   fx.setRevoked(true);

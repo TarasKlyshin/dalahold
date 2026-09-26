@@ -140,7 +140,15 @@ export class DealFlow {
     };
   }
 
-  async submitTransfer({ challengeId, signature, certificateId }) {
+  async submitTransfer(request) {
+    if (!request || typeof request !== 'object' || Array.isArray(request) ||
+        Object.keys(request).length !== 3 ||
+        ['challengeId', 'signature', 'certificateId'].some((key) => !Object.hasOwn(request, key)) ||
+        !Buffer.isBuffer(request.signature) || request.signature.length === 0 ||
+        typeof request.certificateId !== 'string' || !ID.test(request.certificateId)) {
+      throw new Error('invalid challenge response');
+    }
+    const { challengeId, signature, certificateId } = request;
     if (!UUID.test(challengeId)) throw new Error('invalid challenge id');
     const row = this.#db.prepare('SELECT * FROM challenges WHERE challenge_id = ?').get(challengeId);
     if (!row) throw new Error('unknown challenge');
