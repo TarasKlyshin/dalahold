@@ -38,7 +38,23 @@ export class OwnerStore {
         envelope TEXT NOT NULL,
         UNIQUE (owner_id, nonce)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS deal_grants (
+        owner_id TEXT NOT NULL REFERENCES owners(owner_id),
+        deal_id TEXT NOT NULL,
+        order_hash TEXT NOT NULL UNIQUE REFERENCES issued_grants(order_hash),
+        PRIMARY KEY (owner_id, deal_id)
+      ) STRICT;
     `);
+    // An older local database cannot be safely backfilled: the grant envelope
+    // carries only the order hash, not the deal ID. Refuse issuance until the
+    // operator resolves that state instead of silently allowing a second grant.
+    const unmapped = this.#db.prepare(`SELECT COUNT(*) AS count FROM issued_grants AS g
+      WHERE NOT EXISTS (SELECT 1 FROM deal_grants AS d WHERE d.order_hash = g.order_hash)`)
+      .get().count;
+    if (unmapped !== 0) {
+      this.#db.close();
+      throw new Error('legacy grant state lacks deal binding');
+    }
   }
 
   close() { this.#db.close(); }
@@ -81,11 +97,11 @@ export class OwnerStore {
   // Under one write lock, recheck the credential/epoch and reserve its nonce.
   // Retrying the same order returns the same envelope, never a new grant ID.
   saveVerifiedGrant({ ownerId, subjectId, certificateId, authEpoch,
-    walletAddress, nonce, orderHash, envelope }) {
+    walletAddress, dealId, nonce, orderHash, envelope }) {
     [
       [ownerId, 'owner id'], [subjectId, 'subject id'],
       [certificateId, 'certificate id'], [walletAddress, 'wallet address'],
-      [nonce, 'nonce'],
+      [dealId, 'deal id'], [nonce, 'nonce'],
     ].forEach(([value, name]) => validId(value, name));
     if (!Number.isSafeInteger(authEpoch) || authEpoch < 0 ||
         !/^[a-f0-9]{64}$/.test(orderHash) ||
@@ -99,19 +115,26 @@ export class OwnerStore {
           owner.authEpoch !== authEpoch || owner.walletAddress !== walletAddress) {
         throw new Error('stale authority');
       }
-      const existing = this.#db.prepare('SELECT owner_id, nonce, envelope FROM issued_grants WHERE order_hash = ?')
+      const existing = this.#db.prepare(`SELECT g.owner_id, g.nonce, g.envelope, d.deal_id
+        FROM issued_grants AS g JOIN deal_grants AS d ON d.order_hash = g.order_hash
+        WHERE g.order_hash = ?`)
         .get(orderHash);
       if (existing) {
-        if (existing.owner_id !== ownerId || existing.nonce !== nonce) {
+        if (existing.owner_id !== ownerId || existing.nonce !== nonce || existing.deal_id !== dealId) {
           throw new Error('grant conflict');
         }
         this.#db.exec('COMMIT');
         return { envelope: existing.envelope, replayed: true };
       }
+      const dealGrant = this.#db.prepare(`SELECT order_hash FROM deal_grants
+        WHERE owner_id = ? AND deal_id = ?`).get(ownerId, dealId);
+      if (dealGrant) throw new Error('deal already authorized');
       if (this.#db.prepare(`INSERT OR IGNORE INTO used_nonces (owner_id, nonce)
         VALUES (?, ?)`).run(ownerId, nonce).changes !== 1) throw new Error('replay');
       this.#db.prepare(`INSERT INTO issued_grants (order_hash, owner_id, nonce, envelope)
         VALUES (?, ?, ?, ?)`).run(orderHash, ownerId, nonce, envelope);
+      this.#db.prepare(`INSERT INTO deal_grants (owner_id, deal_id, order_hash)
+        VALUES (?, ?, ?)`).run(ownerId, dealId, orderHash);
       this.#db.exec('COMMIT');
       return { envelope, replayed: false };
     } catch (error) {

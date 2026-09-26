@@ -74,11 +74,15 @@ test('offline issuer and signer agree on exact order, replay, rotation and fail-
   assert.deepEqual(await issuer.issue(first), { envelope: issued.envelope, replayed: true });
   assert.equal((await signer.transfer(issued.envelope)).replayed, true);
   assert.equal(sent.length, 1);
+  await assert.rejects(issuer.issue(signed(order({ nonce: 'second-nonce-same-deal' }), cert1)),
+    /deal already authorized/);
   await assert.rejects(issuer.issue({ ...first, orderBytes: bytes(order({ amount_lamports: '1300' })) }),
     /identity rejected/);
-  await assert.rejects(issuer.issue(signed(order({ amount_lamports: '1300' }), cert1)), /replay/);
+  await assert.rejects(issuer.issue(signed(order({
+    deal_id: 'test-deal-other', amount_lamports: '1300',
+  }), cert1)), /replay/);
 
-  const pending = await issuer.issue(signed(order({ nonce: 'nonce-2' }), cert1));
+  const pending = await issuer.issue(signed(order({ deal_id: 'test-deal-2', nonce: 'nonce-2' }), cert1));
   const rebindBytes = bytes({
     version: 1, action: 'rebind_certificate', owner_id: OWNER_ID,
     new_certificate_id: 'cert-2', nonce: 'rotate-1', expires_at: NOW + 120_000,
@@ -110,24 +114,24 @@ test('offline issuer and signer agree on exact order, replay, rotation and fail-
   assert.equal(rotated.walletAddress, WALLET);
   assert.equal(rotated.authEpoch, 1);
   await assert.rejects(signer.transfer(pending.envelope), /stale_epoch/);
-  await assert.rejects(issuer.issue(signed(order({ nonce: 'nonce-3', auth_epoch: 1 }), cert1)),
+  await assert.rejects(issuer.issue(signed(order({ deal_id: 'test-deal-3', nonce: 'nonce-3', auth_epoch: 1 }), cert1)),
     /stale authority/);
 
-  const next = await issuer.issue(signed(order({ nonce: 'nonce-4', auth_epoch: 1 }), cert2));
+  const next = await issuer.issue(signed(order({ deal_id: 'test-deal-3', nonce: 'nonce-4', auth_epoch: 1 }), cert2));
   assert.equal((await signer.transfer(next.envelope)).status, 'submitted');
   assert.equal(sent.length, 2);
   assert.equal(sent[1].wallet_address, WALLET);
 
   verificationUnavailable = true;
-  await assert.rejects(issuer.issue(signed(order({ nonce: 'nonce-5', auth_epoch: 1 }), cert2)),
+  await assert.rejects(issuer.issue(signed(order({ deal_id: 'test-deal-4', nonce: 'nonce-5', auth_epoch: 1 }), cert2)),
     /certificate status unavailable/);
   verificationUnavailable = false;
   revoked = true;
-  await assert.rejects(issuer.issue(signed(order({ nonce: 'nonce-5', auth_epoch: 1 }), cert2)),
+  await assert.rejects(issuer.issue(signed(order({ deal_id: 'test-deal-4', nonce: 'nonce-5', auth_epoch: 1 }), cert2)),
     /identity rejected/);
   revoked = false;
   powers = false;
-  await assert.rejects(issuer.issue(signed(order({ nonce: 'nonce-6', auth_epoch: 1 }), cert2)),
+  await assert.rejects(issuer.issue(signed(order({ deal_id: 'test-deal-5', nonce: 'nonce-6', auth_epoch: 1 }), cert2)),
     /powers rejected/);
   await assert.rejects(signer.transfer(JSON.stringify({ payload: 'e30', sig: 'AA' })), /bad_signature/);
   assert.equal(sent.length, 2);

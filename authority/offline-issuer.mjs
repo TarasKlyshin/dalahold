@@ -111,7 +111,7 @@ export class OfflineIssuer {
     return this.#store.saveVerifiedGrant({
       ownerId: owner.ownerId, subjectId: identity.subjectId, certificateId,
       authEpoch: order.auth_epoch, walletAddress: owner.walletAddress,
-      nonce: order.nonce, orderHash, envelope,
+      dealId: order.deal_id, nonce: order.nonce, orderHash, envelope,
     });
   }
 

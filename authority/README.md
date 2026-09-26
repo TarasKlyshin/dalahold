@@ -7,8 +7,15 @@ is compare-and-swap and increments the epoch without changing the address.
 `offline-issuer.mjs` accepts a canonical signed test order, asks injected
 identity and power verifiers, then signs the signer's narrow grant format with
 a separate test policy key. One order hash/nonce gets one durable envelope;
-retries receive the same bytes. The integration test runs this through the
+retries receive the same bytes. A deal ID is also unique per owner for this
+single test-transfer action, so a fresh nonce cannot authorize a second
+transfer for the same deal. The integration test runs this through the
 offline signer before and after certificate rotation.
+
+Existing local SQLite files with grants issued before the deal-binding table
+cannot be safely migrated automatically because those grants did not store a
+deal ID. The store refuses to open them (`legacy grant state lacks deal
+binding`); preserve the file for review rather than deleting it silently.
 
 Run `node --test authority/*.test.mjs signer/signer.test.mjs` on Node 22. The built-in
 `node:sqlite` API is experimental. This module has **no HTTP endpoint** and

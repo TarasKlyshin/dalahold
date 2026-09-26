@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { OwnerStore } from './owner-store.mjs';
 
@@ -75,12 +76,18 @@ test('grant reservation is durable, idempotent, and invalidated by rotation', (t
   const store = new OwnerStore(path);
   store.registerVerifiedOwner(owner);
   const orderHash = 'a'.repeat(64);
-  const input = { ...owner, authEpoch: 0, nonce: 'grant-1', orderHash, envelope: '{"grant":1}' };
+  const input = { ...owner, authEpoch: 0, dealId: 'deal-1',
+    nonce: 'grant-1', orderHash, envelope: '{"grant":1}' };
   assert.deepEqual(store.saveVerifiedGrant(input), { envelope: input.envelope, replayed: false });
   assert.deepEqual(store.saveVerifiedGrant({ ...input, envelope: '{"grant":2}' }),
     { envelope: input.envelope, replayed: true });
   assert.throws(() => store.saveVerifiedGrant({ ...input, nonce: 'other-nonce' }), /grant conflict/);
-  assert.throws(() => store.saveVerifiedGrant({ ...input, orderHash: 'b'.repeat(64) }), /replay/);
+  assert.throws(() => store.saveVerifiedGrant({
+    ...input, nonce: 'other-nonce', orderHash: 'c'.repeat(64),
+  }), /deal already authorized/);
+  assert.throws(() => store.saveVerifiedGrant({
+    ...input, dealId: 'deal-2', orderHash: 'b'.repeat(64),
+  }), /replay/);
   store.close();
 
   const reopened = new OwnerStore(path);
@@ -91,4 +98,16 @@ test('grant reservation is durable, idempotent, and invalidated by rotation', (t
     previousCertificateId: 'cert-1', newCertificateId: 'cert-2', nonce: 'rotate-1',
   });
   assert.throws(() => reopened.saveVerifiedGrant(input), /stale authority/);
+});
+
+test('pre-existing unmapped grants fail closed instead of allowing another deal payout', (t) => {
+  const path = fixture(t);
+  const initial = new OwnerStore(path);
+  initial.registerVerifiedOwner(owner);
+  initial.close();
+  const legacy = new DatabaseSync(path);
+  legacy.prepare(`INSERT INTO issued_grants (order_hash, owner_id, nonce, envelope)
+    VALUES (?, ?, ?, ?)`).run('f'.repeat(64), owner.ownerId, 'old-nonce', '{"grant":1}');
+  legacy.close();
+  assert.throws(() => new OwnerStore(path), /legacy grant state lacks deal binding/);
 });
