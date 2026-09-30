@@ -58,7 +58,7 @@ the response contains one. `TestCmsSigner` labels this diagnostic
 OCSP fallback is enabled. The separate adapter above now validates these
 conditions; it does not call that utility for acceptance.
 
-Current verification: 89 Node cases + 7 offline Solana cases; 4 additional SDK
+Current verification: 112 Node cases + 7 offline Solana cases; 4 additional SDK
 runs (default CRL refusal, 47 signed synthetic/transport checks, live TEST OCSP
 CMS-to-HTTP acceptance including genuine bundled revoked/wrong-purpose
 certificate refusals, plus identity/parser/offline-storage compatibility).
@@ -66,7 +66,7 @@ Synthetic responses separately establish policy and
 transport behavior. The genuine revoked fixture returns trusted, bound, fresh
 TEST OCSP `revoked`; the wrong-purpose fixture is refused before status lookup.
 Official rules, archive provenance, stable identity, powers,
-rotation and independent review remain unaccepted. Claude Opus 5.5/max's
+browser identity/rotation and full independent review remain unaccepted. Claude Opus 5.5/max's
 read-only review timed out after 240 seconds with no findings.
 
 The continuation sections below are a chronological trail: their pending
@@ -201,6 +201,60 @@ created. Browser enrolment/rebind requires a dedicated signed intent, stable-key
 protection and recovery, atomic freshness checks, account-type policy, suitable
 same-role replacement fixtures and independent review. Actual model/review from
 the requested Claude Opus 5.5/max attempt remains unconfirmed after its timeout.
+This paragraph records Spike 013; the following step adds a separate internal
+key/binding library but still does not enable browser enrollment.
+
+### Protected personal binding intents, 30 September 2026
+
+[Spike 014](../.planning/spikes/014-personal-binding-intents/README.md) adds a
+separate internal TEST personal registry, with explicit operator provisioning,
+one private mapping key, SQLite metadata and protected backup. Enrollment and
+replacement each require their own exact, session-bound, five-minute CMS intent.
+Only strict fresh TEST OCSP personal evidence qualifies. Organization context
+always refuses; a legal certificate sharing a person's IIN does not become a
+personal replacement. Historical probe receipts cannot enroll anyone.
+
+Binding/epoch/retired-certificate/receipt updates commit together. Replays,
+foreign/stale credentials, byte/candidate substitution, lost/changed keys and
+transaction failures refuse or return the same clearly historical receipt.
+Twenty-three policy/storage tests and genuine bundled personal CMS enrollment,
+backup/restart/re-enrollment and corporate/revoked/wrong-purpose/tampered refusals
+pass. Stored historical receipts have a domain-separated MAC; tampered history
+refuses. Backups use private staging, integrity checks and atomic publication;
+failed unpublished copies remove only their temporary staging, permitting retry.
+Positive renewal between two eligible personal certificates is **synthetic
+only**; the bundle has no suitable second currently valid personal fixture.
+
+The HTTP stand does not import this library or enable login, wallet creation or
+grants. A local private-file key is not an encrypted vault. An older backup is an
+older epoch/retirement snapshot, not global anti-rollback; public authorization
+must stay disabled until recovery, key custody and HTTP boundaries are reviewed.
+No new browser UAT or actual wallet is claimed.
+
+Operator provisioning is explicit, non-overwriting and separate from server start:
+
+```sh
+# From the repo root; creates an empty private TEST registry, never an account.
+node --input-type=module -e 'import { initializePersonalBindings } from "./nca/personal-bindings.mjs"; initializePersonalBindings(".local/nca-personal-bindings");'
+node --test nca/personal-bindings.test.mjs
+```
+
+Never rerun initialization as recovery or delete an existing key to regenerate it.
+Back up key/database together to a new private directory with `backupTo`; point a
+new internal store at that protected pair for TEST restore checks. A missing or
+changed key fails closed; do not overwrite existing state. Private registries and
+backups remain ignored by Git and are not used by `nca/server.mjs`.
+On 30 September an empty local registry was explicitly provisioned at
+`.local/nca-personal-bindings` with its protected current backup at
+`.local/nca-personal-bindings-initial-backup`; both are **prepared, not active**.
+Do not rerun the provisioning example against either existing path. No personal
+binding or intent exists in this local registry yet; genuine SDK acceptance above
+used isolated temporary test state.
+Inspect the backup result: `{published:true,durability:'synced'}` is the normal
+local result; `parent_sync_unconfirmed` means the complete target exists but its
+final directory-sync durability is not established. Do not overwrite it or treat
+it as an unpublished failure. Publication assumes a trusted, cooperative parent;
+adversarial same-user empty-directory races and power-loss acceptance are not proven.
 
 ## Start and check
 

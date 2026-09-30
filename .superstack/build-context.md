@@ -59,7 +59,15 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
   Internal opt-in `verifyIdentity` now maps verified TEST subject attributes
   to separate HMAC person/organization IDs; genuine CMS and offline OwnerStore
   compatibility pass. It is not called by HTTP and creates no browser account,
-  durable mapping key, real wallet or corporate permission.
+  real wallet or corporate permission. `personal-bindings.mjs` now provides
+  separate internal TEST key provisioning, dedicated personal enrollment/rebind
+  intents, atomic epoch/retirement/receipt and protected backup/restart. Genuine
+  personal enrollment and corporate/revoked/wrong-purpose/tampered refusals pass;
+  positive same-profile renewal is synthetic only. No HTTP account or grant uses
+  it, and restoring an older snapshot does not prove live anti-rollback.
+  Empty private registry/current backup are prepared under ignored `.local/`,
+  not loaded by the HTTP stand. Focused storage review led to atomic backup,
+  history MAC and expiry-race fixes; global anti-rollback remains an auth blocker.
 
 ## Build status
 
@@ -76,7 +84,7 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 
 `mvp_complete: false`
 
-`tests_passing: true` (89 Node + 7 offline Solana cases, plus 4 SDK runs including 47 OCSP and 30 subject-parser checks, CRL refusal, live TEST OCSP HTTP/genuine negatives and identity/offline-store compatibility, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed, not browser-owner/business-grant or devnet acceptance)
+`tests_passing: true` (112 Node + 7 offline Solana cases, plus 4 SDK runs including 47 OCSP and 30 subject-parser checks, CRL refusal, live TEST OCSP HTTP/genuine negatives and genuine personal-binding/backup checks, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed, not browser-owner/business-grant or devnet acceptance)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)

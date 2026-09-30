@@ -7,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { prepareSdk, javaProcess } from './sdk.mjs';
 import { OwnerStore } from '../authority/owner-store.mjs';
+import { initializePersonalBindings, PersonalBindings } from './personal-bindings.mjs';
 
-test('opaque subject identity: genuine TEST CMS, typed actors and offline owner-store compatibility',
+test('opaque subject identity: genuine TEST CMS, dedicated personal binding and offline storage compatibility',
   { skip: !process.env.NCA_SDK_ROOT, timeout: 60_000 }, async (t) => {
     const root = process.env.NCA_SDK_ROOT;
     const java = process.env.NCA_JAVA_BIN || '/opt/homebrew/opt/openjdk@17/bin';
@@ -88,6 +89,64 @@ test('opaque subject identity: genuine TEST CMS, typed actors and offline owner-
       assert.notEqual(remapped.identity.personId, first.identity.personId);
     } finally { otherKey.fill(0); }
 
+    // Real bundled personal TEST CMS over a dedicated enrollment intent. This
+    // internal binding has no HTTP session/account, corporate powers or wallet.
+    const personalDirectory = join(build, 'personal-bindings');
+    initializePersonalBindings(personalDirectory);
+    const personal = new PersonalBindings({ directory: personalDirectory, sdk });
+    const sessionHash = '7'.repeat(64);
+    let enrollment, enrollmentCms, enrollmentReceipt, personalBinding;
+    try {
+      enrollment = personal.createIntent(sessionHash, { action: 'enroll_test_person' });
+      enrollmentCms = await sign(enrollment.bytes, 'sign');
+      const accepted = await personal.submit(sessionHash, { intentId: enrollment.id, cms: enrollmentCms });
+      enrollmentReceipt = accepted.receipt;
+      personalBinding = personal.binding(enrollmentReceipt.bindingId);
+      assert.equal(accepted.historical, false);
+      assert.equal(enrollmentReceipt.scope, 'test_personal_binding_only');
+      assert.equal(enrollmentReceipt.statusSource, 'test_ocsp');
+      assert.equal(personalBinding.certificateDigest, individual.certificateDigest);
+      assert.equal(personalBinding.epoch, 0);
+      assert.ok(!Object.hasOwn(personalBinding, 'walletAddress'));
+      assert.deepEqual(await personal.submit(sessionHash, { intentId: enrollment.id, cms: enrollmentCms }),
+        { receipt: enrollmentReceipt, historical: true });
+
+      const replacement = personal.createIntent(sessionHash, { action: 'replace_test_certificate',
+        bindingId: personalBinding.bindingId, newCertificateDigest: director.certificateDigest });
+      // Same IIN does not authorize replacing a personal binding with an org cert.
+      await assert.rejects(personal.submit(sessionHash,
+        { intentId: replacement.id, cms: await sign(replacement.bytes, 'legal-director') }), /organization_binding_disabled/);
+      // Actual revoked CMS refuses in SDK before any candidate-certificate match.
+      await assert.rejects(personal.submit(sessionHash,
+        { intentId: replacement.id, cms: await sign(replacement.bytes, 'revoked') }), /binding_identity_rejected/);
+      assert.deepEqual(personal.binding(personalBinding.bindingId), personalBinding);
+      for (const mode of ['wrong-purpose', 'legal-signer']) {
+        const rejected = personal.createIntent(sessionHash, { action: 'enroll_test_person' });
+        await assert.rejects(personal.submit(sessionHash, { intentId: rejected.id, cms: await sign(rejected.bytes, mode) }),
+          /binding_identity_rejected|organization_binding_disabled/);
+      }
+      const tamperedEnrollment = personal.createIntent(sessionHash, { action: 'enroll_test_person' });
+      await assert.rejects(personal.submit(sessionHash, { intentId: tamperedEnrollment.id,
+        cms: await sign(Buffer.concat([tamperedEnrollment.bytes, Buffer.from('changed')]), 'sign') }), /binding_identity_rejected/);
+      const backupDirectory = join(build, 'personal-backup');
+      assert.deepEqual(await personal.backupTo(backupDirectory), { published: true, durability: 'synced' });
+      const restored = new PersonalBindings({ directory: backupDirectory, sdk });
+      try {
+        assert.deepEqual(restored.binding(personalBinding.bindingId), personalBinding);
+        const again = restored.createIntent(sessionHash, { action: 'enroll_test_person' });
+        const fresh = await restored.submit(sessionHash, { intentId: again.id, cms: await sign(again.bytes, 'sign') });
+        assert.equal(fresh.receipt.bindingId, personalBinding.bindingId);
+        assert.equal(fresh.receipt.epoch, 0);
+        assert.deepEqual(restored.binding(personalBinding.bindingId), personalBinding);
+      } finally { restored.close(); }
+    } finally { personal.close(); }
+    const personalReopened = new PersonalBindings({ directory: personalDirectory, sdk });
+    try {
+      assert.deepEqual(personalReopened.binding(personalBinding.bindingId), personalBinding);
+      assert.deepEqual(await personalReopened.submit(sessionHash, { intentId: enrollment.id, cms: enrollmentCms }),
+        { receipt: enrollmentReceipt, historical: true });
+    } finally { personalReopened.close(); }
+
     // Trusted storage fixture only: no corporate powers policy, HTTP enrolment,
     // real Solana address/key, grant signature or business operation.
     const path = join(build, 'offline-owner.sqlite');
@@ -112,5 +171,5 @@ test('opaque subject identity: genuine TEST CMS, typed actors and offline owner-
     try { assert.deepEqual(reopened.owner(owner.ownerId), { ...owner,
       certificateId: director.certificateDigest, authEpoch: 1 }); }
     finally { reopened.close(); }
-    t.diagnostic('Genuine individual/director TEST certificates map to one subject; another subject in the same organization remains distinct. Employee in valid folder is actually revoked. Offline storage rotation/restart pass; no corporate powers or account endpoint.');
+    t.diagnostic('Genuine TEST personal enrollment, historical retry, stable mapping after private backup/restart and corporate/revoked/wrong-purpose/tampered refusals pass. Positive personal renewal is synthetic only: no eligible second bundled personal certificate. No HTTP account, corporate powers or wallet.');
   });
