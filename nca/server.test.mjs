@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { createProbeServer } from './server.mjs';
+import { signatureFromResponse } from './client.mjs';
 
 // Injected verifier for HTTP/transaction tests only, never an NCA proof.
 const digest = 'a'.repeat(64);
@@ -98,6 +99,27 @@ test('altered amount/recipient bytes, browser fields, other session and malforme
   assert.equal((await app.post('/api/challenges', {}, { 'Sec-Fetch-Site': 'same-site' })).status, 403);
   assert.equal((await app.post('/api/verify', { challengeId: created.id, cms: 'A'.repeat(140_000) })).status, 413);
   assert.equal((await app.post('/api/verify', { challengeId: created.id, cms: created.bytesBase64 })).status, 200);
+});
+
+test('client-normalized CMS PEM reaches the unchanged strict HTTP gate and retries once', async (t) => {
+  const app = await startProbe(temporary(t));
+  t.after(() => app.close());
+  const created = await challenge(app);
+  const pem = `-----BEGIN CMS-----\n${created.bytesBase64.match(/.{1,64}/g).join('\n')}\n-----END CMS-----\n`;
+  const raw = await app.post('/api/verify', { challengeId: created.id, cms: pem });
+  assert.equal(raw.status, 400, 'HTTP must still require canonical base64');
+  assert.deepEqual(await raw.json(), { error: 'invalid_signature_request' });
+  const cms = signatureFromResponse({ status: true, body: { result: [pem] } });
+  assert.equal(cms, created.bytesBase64);
+  const verified = await app.post('/api/verify', { challengeId: created.id, cms });
+  assert.equal(verified.status, 200);
+  const result = await verified.json();
+  assert.equal(result.replay, false);
+  const retry = await app.post('/api/verify', { challengeId: created.id, cms });
+  assert.equal(retry.status, 200);
+  const repeated = await retry.json();
+  assert.equal(repeated.replay, true);
+  assert.deepEqual(repeated.receipt, result.receipt);
 });
 
 test('pending challenge expiry, status unavailability and SDK error reject before consumption', async (t) => {

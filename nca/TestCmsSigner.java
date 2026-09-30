@@ -102,6 +102,16 @@ public final class TestCmsSigner {
       signed = CMSSignedData.replaceSigners(signed, new SignerInformationStore(List.of(one, one)));
     }
     byte[] cms = signed.getEncoded();
+    if (args[1].equals("pem")) {
+      // Same Kalkan PEMWriter used by installed NCALayer Basics; test output
+      // is captured in memory, never written to logs or fixture files.
+      var text = new java.io.StringWriter();
+      try (var writer = new kz.gov.pki.kalkan.openssl.PEMWriter(text)) {
+        writer.writeObject(signed);
+      }
+      System.out.print(text.toString());
+      return;
+    }
     if (args[1].equals("ocsp-check")) {
       phase = "verify_exact_cms";
       var assets = CmsVerifier.testChain(sdk, new Date());

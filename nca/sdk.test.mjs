@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { createProbeServer } from './server.mjs';
 import { javaProcess, prepareSdk } from './sdk.mjs';
+import { signatureFromResponse } from './client.mjs';
 
 const sdkRoot = process.env.NCA_SDK_ROOT;
 const crlDirectory = process.env.NCA_TEST_CRL_DIR;
@@ -90,7 +91,11 @@ test(`real SDK exact-byte signature and HTTP status gates (${statusSource}); not
     } else {
       assert.equal((await post('/api/verify', { challengeId: challenge.id, cms: auth })).status, 422);
     }
-    const cms = await sign(bytes);
+    // SDK-created CMS through Kalkan's actual PEM writer and the browser
+    // normalizer. This is not an observed desktop NCALayer signing roundtrip.
+    const pem = await sign(bytes, 'pem');
+    assert.ok(pem.startsWith('-----BEGIN CMS-----'));
+    const cms = signatureFromResponse({ status: true, body: { result: [pem] } });
     const response = await post('/api/verify', { challengeId: challenge.id, cms });
     assert.equal(response.status, 200);
     const result = await response.json();

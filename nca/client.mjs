@@ -23,7 +23,13 @@ export function signatureFromResponse(response) {
   const signatures = Array.isArray(value) ? value : [value];
   if (signatures.length !== 1 || typeof signatures[0] !== 'string' ||
       !signatures[0] || signatures[0].length > 131072) throw new Error('invalid_ncalayer_response');
-  return signatures[0];
+  // Installed Basics wraps CMS in one PEM block. Normalize only its transport;
+  // the server still validates the original CMS bytes, certificate and status.
+  const pem = /^-----BEGIN CMS-----\r?\n([A-Za-z0-9+/=\r\n]+)\r?\n-----END CMS-----(?:\r?\n)?$/.exec(signatures[0]);
+  const base64 = pem ? pem[1].replace(/[\r\n]/g, '') : signatures[0];
+  if (!base64 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64) ||
+      btoa(atob(base64)) !== base64) throw new Error('invalid_ncalayer_response');
+  return base64;
 }
 
 export function ncalayerCall(request, { WebSocketClass = globalThis.WebSocket, timeout = 120_000 } = {}) {
@@ -73,6 +79,7 @@ if (typeof document !== 'undefined') {
     ncalayer_timeout: 'Время ожидания NCALayer истекло. Создай новое распоряжение и повтори.',
     signing_cancelled_or_rejected: 'Подписание отменено или сертификат не подходит. Можно выбрать тестовый сертификат и повторить.',
     invalid_ncalayer_response: 'NCALayer вернул неподдерживаемый ответ. Проверка не выполнена.',
+    invalid_signature_request: 'Сервер отклонил формат запроса подписи. Обнови страницу, создай новое распоряжение и повтори. Криптографическая проверка ещё не выполнялась.',
     signature_rejected: 'Подпись отклонена: данные, назначение сертификата или тестовая цепочка не прошли проверку.',
     challenge_expired: 'Распоряжение истекло. Создай новое и подпиши его.',
     status_unavailable: 'Сервер не может подтвердить статус сертификата: источник отсутствует, устарел или не прошёл проверку. Обнови страницу после восстановления проверки.',

@@ -130,3 +130,19 @@ stand to `authority/`, deal decisions or devnet until their gates are verified.
 - Claude CLI auth is valid, but a minimal tools-disabled Opus 5.5/max patch
   review timed out after 60 seconds with no output. No model fallback,
   independent review or production acceptance is claimed.
+
+## CMS PEM correction from local e4a3b24
+
+- User-assisted Chrome attempt recorded `cms_received` then server
+  `invalid_signature_request`, before cryptographic verification. Installed
+  Basics writes CMS as PEM; the client previously forwarded it to a strict
+  canonical-base64 API unchanged. No raw user CMS was captured or logged.
+- Normalize one `BEGIN CMS` block with LF/CRLF; retain canonical base64,
+  one-container and size checks. Ambiguous/wrong-label/malformed inputs refuse.
+  The HTTP API and certificate/OCSP/expiry/replay gates are unchanged.
+- Three failing-before/passing-after cases cover byte preservation, malformed
+  transport and HTTP/retry integration. 88 Node + 7 offline Solana cases and
+  all 3 SDK runs pass. The live SDK case uses Kalkan's real PEM writer through
+  the client parser and strict TEST OCSP, not a desktop signing dialog.
+- Browser receipt for the user's legal-entity test certificate and corporate
+  powers are still unaccepted. Reload and supervised signing retest are needed.

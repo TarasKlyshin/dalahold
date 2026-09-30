@@ -50,8 +50,9 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
   are tested. In explicit TEST OCSP mode, strict responder trust/CertID/nonce/
   freshness checks now pass SDK-generated CMS → one-use HTTP test receipt.
   Incompatible base/delta CRLs still close default CRL mode, without fallback.
-  A browser signing request returned an unsupported NCALayer response; no
-  usable NCALayer CMS or browser receipt has passed acceptance. Independent
+  The user's browser received a signature container but HTTP rejected its
+  format. CMS PEM normalization is now SDK/HTTP-tested; a browser receipt
+  has not passed acceptance. Independent
   review, identity/powers and official negative fixtures remain open.
 
 ## Build status
@@ -69,7 +70,7 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 
 `mvp_complete: false`
 
-`tests_passing: true` (85 Node + 7 offline Solana cases, plus 3 SDK runs including 47 synthetic/transport checks, CRL refusal and live TEST OCSP HTTP acceptance, as of 2026-09-30; not NCALayer end-to-end acceptance)
+`tests_passing: true` (88 Node + 7 offline Solana cases, plus 3 SDK runs including 47 synthetic/transport checks, CRL refusal and live Kalkan PEM/client-normalized TEST OCSP HTTP acceptance, as of 2026-09-30; not NCALayer end-to-end acceptance)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)
@@ -216,3 +217,15 @@ The master plan and acceptance criteria remain in `IMPLEMENTATION_PLAN.md` and
   Java dialog control remains unavailable; human cancellation/selection required.
 - Authenticated Claude CLI, but tools-disabled Opus 5.5/max review timed out
   after 60 seconds without output; actual execution model and review unconfirmed.
+
+## 2026-09-30 CMS PEM transport correction
+
+- Baseline local `main` at `e4a3b247068c53fa8f4d68de807127514bb85bd8`.
+  The user's Chrome journal shows CMS received then HTTP format rejection,
+  before certificate/OCSP verification. Installed Basics emits CMS PEM.
+- Client normalizes one CMS PEM block to canonical base64 without changing
+  signed bytes or loosening the server gate. Format errors now have a specific
+  safe message. No new dependencies, authority grants or personal-key access.
+- 95 local cases + all 3 SDK runs pass; Kalkan PEM writer → client parser →
+  strict TEST OCSP → HTTP test receipt/retry is verified. The user's desktop
+  signing retest, legal-entity certificate acceptance and powers remain open.

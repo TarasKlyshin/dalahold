@@ -36,11 +36,11 @@ revocation coverage. The probe now invokes the common pair guard and rejects
 this bundle. Do not edit CRL numbers, ignore the delta, or disable the guard.
 
 The browser connected to NCALayer without a TLS bypass and issued exact
-OCSP-bound instructions. A signing request returned an unsupported response;
-no usable CMS, completed certificate selection or browser receipt was observed.
-The Java app window could not be controlled by the available UI connector.
-The browser refuses that result and re-enables controls without a receipt.
-Compatibility diagnosis and supervised test-certificate selection remain open.
+OCSP-bound instructions. An earlier request returned an unsupported response.
+The user's later Chrome journal records a signature container followed by
+HTTP format rejection; the CMS PEM transport correction below fixes that
+boundary. No browser test receipt is yet verified. The Java app window cannot
+be controlled by the available UI connector; supervised retest remains open.
 Responsive checks at 375/768/1440 found no horizontal overflow; keyboard focus,
 status live-region and control states were inspected, with no captured console
 errors. Web Vitals and a real file-download result were not measured.
@@ -56,7 +56,7 @@ the response contains one. `TestCmsSigner` labels this diagnostic
 OCSP fallback is enabled. The separate adapter above now validates these
 conditions; it does not call that utility for acceptance.
 
-Current verification: 85 Node cases + 7 offline Solana cases; 3 additional SDK
+Current verification: 88 Node cases + 7 offline Solana cases; 3 additional SDK
 runs (default CRL refusal, 47 signed synthetic/transport checks, live TEST OCSP
 CMS-to-HTTP acceptance). Synthetic revoked/delegated responders establish
 policy behavior, not coverage of genuine official revoked/wrong-purpose
@@ -93,6 +93,26 @@ Claude Code 2.1.283 reports an authenticated first-party session. A tools-disabl
 read-only patch review requested `claude-opus-5-5` / max and timed out after
 60 seconds with no output. Actual model execution and independent review are
 not confirmed; no model fallback or authentication change was attempted.
+
+### CMS PEM transport correction, 30 September 2026
+
+Baseline `e4a3b247068c53fa8f4d68de807127514bb85bd8`. The user's Chrome
+journal records `cms_received` followed by server `invalid_signature_request`:
+the request was rejected before certificate or OCSP verification. Installed
+Basics bytecode writes CMS through Kalkan `PEMWriter`, whereas the HTTP API
+requires canonical base64. No raw user CMS was retained or logged.
+
+The client now accepts exactly one `BEGIN CMS` PEM block (LF or CRLF), removes
+only its wrapper/line breaks and checks canonical base64 before submission.
+Ambiguous blocks, trailing text, certificate PEM, malformed/noncanonical base64
+and oversized responses refuse. The server and its cryptographic/status gates
+are unchanged. Format rejection now has a specific safe browser message/code.
+Three regressions failed before the fix and pass after it. The live SDK test
+now uses Kalkan's actual PEM writer → client normalizer → strict TEST OCSP →
+one-use HTTP receipt/retry; it is not a completed desktop NCALayer dialog.
+All 95 local cases and the 3 SDK runs pass. Browser receipt acceptance for the
+user's legal-entity certificate still requires a supervised retest; certificate
+validity/status and corporate powers are not inferred from `cms_received`.
 
 ## Start and check
 
