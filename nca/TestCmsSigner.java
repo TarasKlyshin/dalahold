@@ -27,11 +27,24 @@ import kz.gov.pki.reference.KNCAServiceRequestMethod;
 public final class TestCmsSigner {
   static String phase = "input";
   static SigningEntity entity(Path sdk, char[] password, String mode) throws Exception {
+    Path testRoot = sdk.resolve("Keys and Certs/Gost2015").toRealPath();
+    CmsVerifier.check(testRoot.startsWith(sdk.toRealPath()));
     boolean wrongPurpose = mode.equals("wrong-purpose") || mode.equals("wrong-purpose-checks");
     String period = mode.equals("expired") ? "2024.10.29-2025.10.29" : "2026.05.08-2027.05.07";
     Path directory = sdk.resolve("Keys and Certs/Gost2015/" + period);
-    if (!wrongPurpose) directory = directory.resolve("Физическое лицо").resolve(
+    if (List.of("legal-signer", "legal-employee", "legal-director").contains(mode)) {
+      String role = mode.equals("legal-signer") ? "Сотрудник с правом подписи" :
+          mode.equals("legal-employee") ? "Сотрудник организации" : "Первый руководитель";
+      try (var directories = Files.list(directory.resolve("Юридическое лицо"))) {
+        var matches = directories.filter(path -> java.text.Normalizer.normalize(
+            path.getFileName().toString(), java.text.Normalizer.Form.NFC).equals(role))
+            .toList();
+        CmsVerifier.check(matches.size() == 1);
+        directory = matches.get(0).resolve("valid");
+      }
+    } else if (!wrongPurpose) directory = directory.resolve("Физическое лицо").resolve(
         mode.equals("expired") ? "Valid" : mode.equals("revoked") ? "revoked" : "valid");
+    CmsVerifier.check(directory.toRealPath().startsWith(testRoot));
     try (var files = Files.walk(directory)) {
       for (Path file : files.filter(path -> path.toString().endsWith(".p12")).sorted().toList()) {
         if (wrongPurpose && !file.getParent().getFileName().toString().equalsIgnoreCase("valid")) continue;
@@ -74,7 +87,8 @@ public final class TestCmsSigner {
     CmsVerifier.check(args.length == 3);
     CmsVerifier.check(List.of("sign", "pem", "attached", "multi", "expired", "revoked",
         "wrong-purpose", "wrong-purpose-checks", "crypto-checks", "checks",
-        "ocsp-diagnostic", "ocsp-check").contains(args[1]));
+        "ocsp-diagnostic", "ocsp-check", "legal-signer", "legal-employee",
+        "legal-director").contains(args[1]));
     Path sdk = Path.of(args[0]);
     var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
     char[] password = input.readLine().toCharArray();

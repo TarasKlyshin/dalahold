@@ -17,10 +17,13 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Arrays;
 import java.util.Set;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import kz.gov.pki.kalkan.asn1.ASN1InputStream;
 import kz.gov.pki.kalkan.asn1.ASN1OctetString;
 import kz.gov.pki.kalkan.asn1.DERInteger;
+import kz.gov.pki.kalkan.asn1.x509.X509Name;
 import kz.gov.pki.kalkan.jce.provider.KalkanProvider;
 import kz.gov.pki.provider.utils.CMSUtil;
 import kz.gov.pki.provider.utils.verifier.VerifierFlags;
@@ -38,6 +41,38 @@ public final class CmsVerifier {
   record Assets(X509Certificate root, X509Certificate ca, List<X509CRL> crls,
                 long validUntil) {}
   record Receipt(String certificateDigest, long validUntil) {}
+  record SubjectIdentity(String personId, String organizationId) {}
+
+  // Identity evidence only, never organization powers. Caller provisions one
+  // stable protected key; no raw IIN/BIN, DN or unkeyed identifier hash output.
+  static SubjectIdentity subjectIdentity(byte[] subjectDer, byte[] key) throws Exception {
+    check(key.length == 32);
+    X509Name subject;
+    try (var input = new ASN1InputStream(subjectDer)) {
+      subject = X509Name.getInstance(input.readObject());
+      check(input.readObject() == null);
+    }
+    var countries = subject.getValues(X509Name.C);
+    var people = subject.getValues(X509Name.SERIALNUMBER);
+    var units = subject.getValues(X509Name.OU);
+    var names = subject.getValues(X509Name.O);
+    check(countries.size() == 1 && countries.get(0).equals("KZ"));
+    check(people.size() == 1 && people.get(0).toString().matches("IIN[0-9]{12}"));
+    check(units.size() <= 1);
+    if (units.isEmpty()) check(names.isEmpty()); // no silent downgrade of organization context
+    else check(units.get(0).toString().matches("BIN[0-9]{12}") && names.size() == 1 &&
+        !names.get(0).toString().isBlank());
+    return new SubjectIdentity(subjectId("person", people.get(0).toString(), key),
+        units.isEmpty() ? null : subjectId("organization", units.get(0).toString(), key));
+  }
+
+  private static String subjectId(String kind, String identifier, byte[] key) throws Exception {
+    var mac = Mac.getInstance("HmacSHA256");
+    mac.init(new SecretKeySpec(key, "HmacSHA256"));
+    String domain = "dalahold:nca:TEST:identity:v1\0" + TEST_ISSUER + "\0" + kind + "\0";
+    return kind + ":" + HexFormat.of().formatHex(mac.doFinal(
+        (domain + identifier).getBytes(StandardCharsets.US_ASCII)));
+  }
 
   static void check(boolean condition) {
     if (!condition) throw new IllegalArgumentException("test verification rejected");
@@ -187,7 +222,9 @@ public final class CmsVerifier {
     String error = "status_unavailable";
     try {
       check(args.length == 3);
-      check(List.of("inspect", "verify", "inspect_ocsp", "verify_ocsp").contains(args[2]));
+      check(List.of("inspect", "verify", "inspect_ocsp", "verify_ocsp",
+          "verify_identity", "verify_identity_ocsp").contains(args[2]));
+      boolean identityRequested = args[2].startsWith("verify_identity");
       Path sdk = Path.of(args[0]);
       boolean ocsp = args[2].endsWith("_ocsp");
       String source = ocsp ? "test_ocsp" : "test_crl_fixture";
@@ -205,18 +242,41 @@ public final class CmsVerifier {
       String bytes = input.readLine();
       String cms = input.readLine();
       check(bytes != null && bytes.length() <= 12000 && cms != null && cms.length() <= 131072);
+      byte[] identityKey = null;
+      if (identityRequested) {
+        String encodedKey = input.readLine();
+        check(encodedKey != null && encodedKey.length() == 44);
+        identityKey = Base64.getDecoder().decode(encodedKey);
+        check(identityKey.length == 32 && Base64.getEncoder().encodeToString(identityKey).equals(encodedKey));
+      }
       check(input.readLine() == null);
       byte[] signed = Base64.getDecoder().decode(cms), exact = Base64.getDecoder().decode(bytes);
       Receipt receipt;
+      X509Certificate identitySigner = null;
       if (ocsp) {
         var signer = verifiedSigner(signed, exact, assets, new Date());
         stage = "ocsp";
         error = "status_unavailable";
         receipt = receipt(signer, assets, OcspVerifier.online(signer, assets.ca()));
+        identitySigner = signer;
       } else receipt = verify(signed, exact, assets, new Date());
+      String identityJson = "";
+      if (identityRequested) {
+        stage = "subject_identity";
+        error = "identity_rejected";
+        try {
+          // CRL verify has already passed; extract only the same verified leaf.
+          if (identitySigner == null) identitySigner = verifiedSigner(signed, exact, assets, new Date());
+          var identity = subjectIdentity(identitySigner.getSubjectX500Principal().getEncoded(), identityKey);
+          check(receipt.validUntil() > System.currentTimeMillis());
+          identityJson = ",\"identity\":{\"schema\":\"nca_test_subject_v1\",\"personId\":\"" +
+              identity.personId() + "\",\"organizationId\":" +
+              (identity.organizationId() == null ? "null" : "\"" + identity.organizationId() + "\"") + "}";
+        } finally { Arrays.fill(identityKey, (byte) 0); }
+      }
       System.out.println("{\"verified\":true,\"certificateDigest\":\"" +
           receipt.certificateDigest() + "\",\"validUntil\":" + receipt.validUntil() +
-          ",\"statusSource\":\"" + source + "\"}");
+          ",\"statusSource\":\"" + source + "\"" + identityJson + "}");
     } catch (Exception failure) {
       // Never print SDK exceptions: they can contain certificate subject data.
       System.out.println("{\"verified\":false,\"error\":\"" + error +

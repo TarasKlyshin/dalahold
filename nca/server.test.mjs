@@ -122,6 +122,30 @@ test('client-normalized CMS PEM reaches the unchanged strict HTTP gate and retri
   assert.deepEqual(repeated.receipt, result.receipt);
 });
 
+test('test-signature HTTP never requests identity mapping or turns identity evidence into owner access', async (t) => {
+  let identityCalls = 0;
+  const dbPath = temporary(t);
+  const app = await startProbe(dbPath, { sdk: { ...fakeSdk,
+    verifyIdentity: () => { identityCalls++; throw new Error('identity mapping must remain internal'); },
+    verify: async (bytes, cms) => ({ ...await fakeSdk.verify(bytes, cms),
+      identity: { personId: `person:${'b'.repeat(64)}`, organizationId: `organization:${'c'.repeat(64)}` },
+      powers: true, ownerId: 'untrusted-extra-fields' }),
+  } });
+  t.after(() => app.close());
+  const created = await challenge(app);
+  const input = { challengeId: created.id, cms: created.bytesBase64 };
+  assert.equal((await app.post('/api/verify', { ...input, identity: { personId: 'browser-claim' } })).status, 400);
+  const response = await app.post('/api/verify', input);
+  assert.equal(response.status, 200);
+  const { receipt } = await response.json();
+  assert.equal(receipt.scope, 'test_signature_only');
+  assert.ok(['identity', 'personId', 'organizationId', 'ownerId', 'powers'].every(field => !Object.hasOwn(receipt, field)));
+  assert.equal(identityCalls, 0);
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try { assert.equal(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='owners'").get().n, 0); }
+  finally { db.close(); }
+});
+
 test('pending challenge expiry, status unavailability and SDK error reject before consumption', async (t) => {
   let clock = Date.now();
   let outcome = { verified: false, error: 'status_unavailable' };

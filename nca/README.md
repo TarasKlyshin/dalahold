@@ -58,10 +58,11 @@ the response contains one. `TestCmsSigner` labels this diagnostic
 OCSP fallback is enabled. The separate adapter above now validates these
 conditions; it does not call that utility for acceptance.
 
-Current verification: 88 Node cases + 7 offline Solana cases; 3 additional SDK
+Current verification: 89 Node cases + 7 offline Solana cases; 4 additional SDK
 runs (default CRL refusal, 47 signed synthetic/transport checks, live TEST OCSP
 CMS-to-HTTP acceptance including genuine bundled revoked/wrong-purpose
-certificate refusals). Synthetic responses separately establish policy and
+certificate refusals, plus identity/parser/offline-storage compatibility).
+Synthetic responses separately establish policy and
 transport behavior. The genuine revoked fixture returns trusted, bound, fresh
 TEST OCSP `revoked`; the wrong-purpose fixture is refused before status lookup.
 Official rules, archive provenance, stable identity, powers,
@@ -175,6 +176,32 @@ certificate-replacement test; corporate powers, business grants, signed deals,
 wallet ownership and devnet remain unconnected. Independent security review,
 official validation rules and SDK provenance remain open.
 
+### Opt-in opaque subject mapping, 30 September 2026
+
+[Spike 013](../.planning/spikes/013-test-subject-identity/README.md) adds internal
+`sdk.verifyIdentity(bytes, cms, mappingKey)`. Only exact, trusted, purpose-valid,
+currently valid and fresh-status TEST CMS can return opaque person and optional
+organization IDs. A caller-provided 32-byte HMAC key goes to stdin only; raw
+IIN/BIN, names and roles are not output. Structured DN attributes reject ambiguity;
+person and organization are separate domains. The TEST issuer and namespace
+prevent accidental use as a production identity scheme.
+
+Genuine current individual/director certificates have distinct digests and one
+person mapping; a signing employee of the same organization is a different person.
+The ordinary employee certificate in `valid` is actually **revoked according to
+fresh TEST OCSP** and yields no identity. Revoked, wrong-purpose and altered CMS
+also yield no identity. Thirty synthetic parser checks and genuine SDK/storage
+checks pass. Temporary OwnerStore rotation retains its owner ID and **fake,
+non-Solana address**, then refuses foreign/stale credentials; it is not a complete
+user-authorized rebind or corporate powers proof.
+
+The HTTP stand **does not call this mapper**, expose identity fields, create an
+account or bind historical probe receipts. No durable mapping key or wallet was
+created. Browser enrolment/rebind requires a dedicated signed intent, stable-key
+protection and recovery, atomic freshness checks, account-type policy, suitable
+same-role replacement fixtures and independent review. Actual model/review from
+the requested Claude Opus 5.5/max attempt remains unconfirmed after its timeout.
+
 ## Start and check
 
 From the project root, use the SDK directory containing `Java/` and
@@ -221,6 +248,7 @@ node --test nca/server.test.mjs nca/client.test.mjs
 NCA_SDK_ROOT='/path/to/SDK 2.0' node --test nca/sdk.test.mjs
 NCA_SDK_ROOT='/path/to/SDK 2.0' node --test nca/ocsp.test.mjs
 NCA_SDK_ROOT='/path/to/SDK 2.0' NCA_TEST_STATUS_SOURCE=ocsp node --test nca/sdk.test.mjs
+NCA_SDK_ROOT='/path/to/SDK 2.0' node --test nca/identity.test.mjs
 ```
 
 The first command uses injected callbacks for HTTP/replay tests only. The

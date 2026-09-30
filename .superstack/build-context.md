@@ -56,6 +56,10 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
   Genuine bundled revoked and wrong-purpose certificates refuse without a
   receipt or consumption. Independent review, official rules/provenance,
   stable identity, certificate rotation and corporate powers remain open.
+  Internal opt-in `verifyIdentity` now maps verified TEST subject attributes
+  to separate HMAC person/organization IDs; genuine CMS and offline OwnerStore
+  compatibility pass. It is not called by HTTP and creates no browser account,
+  durable mapping key, real wallet or corporate permission.
 
 ## Build status
 
@@ -72,7 +76,7 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 
 `mvp_complete: false`
 
-`tests_passing: true` (88 Node + 7 offline Solana cases, plus 3 SDK runs including 47 synthetic/transport checks, CRL refusal and live TEST OCSP HTTP acceptance/genuine negatives, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed, not owner/business-grant or devnet acceptance)
+`tests_passing: true` (89 Node + 7 offline Solana cases, plus 4 SDK runs including 47 OCSP and 30 subject-parser checks, CRL refusal, live TEST OCSP HTTP/genuine negatives and identity/offline-store compatibility, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed, not browser-owner/business-grant or devnet acceptance)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)
@@ -255,3 +259,30 @@ The dated handoffs below preserve earlier checkpoints, not current gate status.
 - Next: stable identity and same-identity replacement acceptance. Business powers,
   authority connection, signed deals, private files and devnet remain gated;
   official rules/provenance and independent review are still outstanding.
+
+## 2026-09-30 internal opaque subject mapping
+
+- Baseline local `main` at `513214fd7c47477c95662c102d863e7172f78b20`.
+  Spike 013 uses structured, already verified TEST leaf attributes and separate
+  keyed HMAC domains for person/organization. No raw IDs or mapping key output;
+  no new dependency, public route, existing owner write or durable key generated.
+- Genuine individual/director certs map to one person; signing employee maps to
+  another person in that organization. The ordinary employee in `valid` is
+  actually TEST-OCSP-revoked, so its apparent replacement test failed closed.
+  It is now a mandatory no-identity negative, not bypassed for a positive demo.
+- 30 parser checks, genuine CMS/status negatives and temporary OwnerStore
+  rotation/restart/foreign/stale cases pass. The address is an explicit non-Solana
+  storage fixture; this is not personal/corporate account acceptance.
+- Failing-before/passing-after test confines P12 real paths to the configured SDK
+  and test subtree; no key-root symlink escape or ambiguous legal-profile selection.
+- 89 Node + 7 offline Solana cases and all 4 SDK runs pass. HTTP regression proves
+  no identity/powers/owner output or automatic enrolment from a probe receipt.
+- GSD quick's required ROADMAP/gsd-sdk are absent; use existing spike tracking,
+  not a fabricated complete GSD run. Claude Opus 5.5/max read-only review timed
+  out after 60 seconds without output; execution model/review unconfirmed.
+- Existing signature-only stand stays unchanged/running; page/status HTTP 200
+  and prior manual receipt ID/hash/time verified read-only, no owners table.
+  New mapper is CODE/TESTED only, not enabled browser RUNTIME/UAT.
+- Next gate: durable mapping-key protection/recovery, personal/organization policy,
+  dedicated exact enrolment/rebind intents and atomic current-state checks, same-
+  role replacement fixtures and independent review. Corporate powers/devnet closed.

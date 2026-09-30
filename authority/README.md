@@ -32,6 +32,17 @@ This is not yet an NCA-verified rebind or a hardened inter-service channel.
 Corporate authorization must remain disabled until an independent source of
 current powers is integrated.
 
+[Spike 013](../.planning/spikes/013-test-subject-identity/README.md) now checks
+the store with opaque person IDs from real verified TEST CMS: individual and
+director certs share one subject, while an employee of the same organization is
+a different subject. Temporary trusted storage rotation/restart keeps one owner
+and the literal **non-Solana fake address**, then rejects foreign/stale credentials.
+This is compatibility evidence only: no new owner endpoint, durable identity
+mapping key, wallet creation or power policy. The HTTP signature probe never
+calls `verifyIdentity`; a probe receipt cannot authorize registration/rebind.
+The corporate employee's `valid` fixture is actually OCSP-revoked, so a genuine
+same-role certificate-renewal UAT and independent review are still required.
+
 The signer must check the current epoch at execution time. Rotation ordering:
 send a signed `/epochs` notice and wait for acknowledgment before committing
 the store's rotation. This is fail-closed but still needs a durable orchestrator
