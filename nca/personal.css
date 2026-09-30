@@ -9,6 +9,12 @@ header .brand { display: inline-flex; align-items: center; min-height: 44px; }
 #personal-workspace summary { display: list-item; min-height: 44px; padding: 10px 0; cursor: pointer; }
 #personal-workspace pre { max-width: 100%; }
 #personal-workspace .digest { display: block; }
+#personal-workspace label { display: block; margin: 16px 0 6px; font-weight: 500; }
+#personal-workspace input, #personal-workspace select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line, #b6bcb0); border-radius: 3px; background: #fffef9; color: var(--ink); font: inherit; box-sizing: border-box; }
+#personal-workspace input { font-family: ui-monospace, monospace; }
+#personal-workspace input:focus-visible, #personal-workspace select:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+#personal-replacement-fields { margin-bottom: 18px; }
+#personal-intent-summary { overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   #personal-workspace .actions { flex-direction: column; align-items: stretch; }
   #personal-workspace button { width: 100%; }

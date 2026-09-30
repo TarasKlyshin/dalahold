@@ -25,14 +25,30 @@
         <button id="personal-refresh" type="button">Обновить готовность</button>
         <button id="personal-close" type="button" disabled>Закрыть TEST-сессию</button>
       </div>
-      <p class="small">Закрытие очищает данные этой страницы и завершает серверную TEST-сессию. Его можно запросить и во время ожидания подписи.</p>
+      <p class="small">Закрытие очищает данные этой страницы и завершает серверную TEST-сессию. Его можно запросить и во время ожидания подписи, но оно не отменяет операцию, уже записанную сервером. Если ответ потерян, сначала повтори отправку той же подписи. После закрытия или истечения сессии потребуется проверка оператором реестра; новая анонимная сессия не восстанавливает старую квитанцию.</p>
       <a id="personal-new-session" class="personal-link" href="/personal/" hidden>Начать новую TEST-сессию</a>
     </section>
     <section aria-labelledby="personal-intent-title">
       <h2 id="personal-intent-title">1. Проверить намерение</h2>
+      <label for="personal-action">Тестовая операция</label>
+      <select id="personal-action" autocomplete="off" disabled>
+        <option value="enroll_test_person">Личная TEST-привязка</option>
+        <option value="replace_test_certificate">Замена TEST-сертификата</option>
+      </select>
+      <div id="personal-replacement-fields" hidden>
+        <p class="notice">Успешная замена настоящего TEST-сертификата ещё не подтверждена: в SDK нет второго действующего личного сертификата той же личности. Модельные тесты не заменяют этот прогон. Отозванный или корпоративный сертификат должен получить отказ.</p>
+        <label for="personal-binding-id">ID существующей TEST-привязки</label>
+        <input id="personal-binding-id" type="text" maxlength="36" autocomplete="off" spellcheck="false" aria-describedby="personal-binding-help" disabled>
+        <p id="personal-binding-help" class="small">ID из первоначальной TEST-квитанции, не ИИН. Сервер не ищет привязку по имени или персональным данным. Сам ID не даёт права на замену.</p>
+        <label for="personal-new-certificate">SHA-256 нового TEST-сертификата</label>
+        <input id="personal-new-certificate" type="text" maxlength="64" autocomplete="off" spellcheck="false" aria-describedby="personal-certificate-help" disabled>
+        <p id="personal-certificate-help" class="small">64 шестнадцатеричных символа: отпечаток сертификата X.509 в DER, не хеш файла .p12. Его можно взять из тестовой квитанции проверки ЭЦП или рассчитать по публичному сертификату. Ключ и пароль сюда не вводи.</p>
+        <p class="small">Сервер включит текущий сертификат и версию привязки в точное распоряжение. Подпиши его новым личным TEST-сертификатом той же личности. Изменение полей или операции очищает предыдущие намерение, подпись и квитанцию на странице.</p>
+      </div>
       <button id="personal-create" type="button" disabled>Создать тестовое намерение</button>
       <div id="personal-intent" hidden>
         <h3 id="personal-exact-title" tabindex="-1">Точные подписываемые данные</h3>
+        <p id="personal-intent-summary"></p>
         <p id="personal-intent-expiry"></p>
         <pre id="personal-exact-bytes" tabindex="0" aria-label="Точный текст намерения в UTF-8"></pre>
         <p class="small">SHA-256 точных байтов</p><code class="digest" id="personal-hash"></code>
@@ -45,7 +61,7 @@
     </section>
     <section aria-labelledby="personal-sign-title">
       <h2 id="personal-sign-title">2. Подписать и получить квитанцию</h2>
-      <p>В NCALayer выбери указанный TEST-контейнер физического лица. Полученная CMS-подпись автоматически отправится на локальный сервер. Если диалог закрыт, подпись не отправляется.</p>
+      <p>Для привязки выбери личный TEST-контейнер; для замены — новый личный TEST-контейнер той же личности, указанный в намерении. Полученная CMS-подпись автоматически отправится на локальный сервер. Если диалог закрыт, подпись не отправляется.</p>
       <div class="actions">
         <button id="personal-sign" class="primary" type="button" disabled>Подписать и проверить</button>
         <button id="personal-retry" type="button" disabled>Повторить отправку подписи</button>
@@ -55,6 +71,7 @@
         <h3 id="personal-receipt-kind" tabindex="-1">Тестовая квитанция</h3>
         <p id="personal-receipt-note"></p>
         <dl>
+          <dt>Тестовая операция</dt><dd id="personal-receipt-action"></dd>
           <dt>ID квитанции</dt><dd id="personal-receipt-id"></dd>
           <dt>SHA-256 подписанного намерения</dt><dd id="personal-receipt-hash"></dd>
           <dt>ID тестовой привязки</dt><dd id="personal-receipt-binding"></dd>

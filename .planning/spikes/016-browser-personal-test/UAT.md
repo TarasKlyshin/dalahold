@@ -62,5 +62,8 @@ Next gated cryptographic scenario: an eligible second, currently valid personal
 TEST certificate for the SAME test person/profile, exact replacement intent,
 stable binding ID, advanced epoch and refusal of old pending authorization.
 Positive genuine renewal is still missing its certificate pair; the existing
-model-only replacement tests are not that acceptance. The browser currently has
-no replacement endpoint, login, business powers, wallet, payment or devnet grant.
+model-only replacement tests are not that acceptance. At this historical checkpoint
+the browser had no replacement endpoint. [Spike017](../017-browser-certificate-replacement/README.md)
+subsequently prepares the explicit replacement UI/API with model-positive/genuine-
+negative evidence; the eligible pair/positive UAT is still absent. No login,
+business powers, wallet, payment or devnet grant is enabled.

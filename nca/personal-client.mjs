@@ -2,10 +2,13 @@ import { ncalayerCall, signingRequest } from './client.mjs';
 
 const scope = 'test_personal_binding_only';
 const action = 'enroll_test_person';
+const replacementAction = 'replace_test_certificate';
 const intentPurpose = 'ТЕСТОВАЯ ЛИЧНАЯ ПРИВЯЗКА. Вход, корпоративные полномочия, кошелёк и платёж не разрешаются.';
 const intentKeys = 'action,bindingId,domain,expectedEpoch,expiresAt,issuedAt,mappingKeyId,newCertificateDigest,nonce,previousCertificateDigest,purpose,sessionHash,statusSource';
 const hashPattern = /^[a-f0-9]{64}$/;
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const sessionEndCaveat = 'Завершение сессии не отменяет уже сохранённые операции. При потерянном ответе нужна проверка оператором реестра.';
+const sessionExpiryMessage = `Срок TEST-сессии истёк. Данные страницы очищены; начни новую сессию. ${sessionEndCaveat}`;
 const messages = {
   ncalayer_unavailable: 'NCALayer недоступен. Запусти его на этом компьютере и проверь соединение снова.',
   ncalayer_disconnected: 'Соединение с NCALayer закрылось. Подпись не отправлена; можно повторить подписание.',
@@ -14,8 +17,8 @@ const messages = {
   invalid_ncalayer_response: 'Ответ NCALayer не содержит поддерживаемую подпись. Проверка не выполнена.',
   invalid_request: 'Запрос подписи не прошёл локальную проверку. Обнови готовность и создай новое намерение.',
   invalid_personal_response: 'Ответ локального сервера не прошёл проверку. Создай новое намерение после обновления готовности.',
-  personal_session_unavailable: 'TEST-сессия недоступна или истекла. Данные страницы очищены; начни новую сессию.',
-  personal_csrf_required: 'Сервер отклонил защитный токен TEST-сессии. Данные страницы очищены; начни новую сессию.',
+  personal_session_unavailable: `TEST-сессия недоступна или истекла. Данные страницы очищены; начни новую сессию. ${sessionEndCaveat}`,
+  personal_csrf_required: `Сервер отклонил защитный токен TEST-сессии. Данные страницы очищены; начни новую сессию. ${sessionEndCaveat}`,
   personal_rate_limited: 'Достигнут лимит запросов TEST-сессии. Подожди и повтори действие.',
   personal_test_unavailable: 'Личная TEST-привязка сейчас недоступна. Обнови готовность после включения локального режима.',
   binding_state_unavailable: 'Реестр TEST-привязок недоступен. Сохранение остановлено; обнови готовность после восстановления реестра.',
@@ -24,7 +27,13 @@ const messages = {
   binding_identity_rejected: 'Подпись отклонена: точные байты, назначение, TEST-цепочка или статус сертификата физического лица не прошли проверку.',
   organization_binding_disabled: 'Этот сертификат не относится к разрешённому TEST-профилю физического лица. Корпоративная привязка недоступна.',
   binding_replay_conflict: 'Намерение уже использовано другой подписью. Эта отправка не создала новую квитанцию.',
-  certificate_rebind_required: 'Для этого лица уже привязан другой сертификат. Замена сертификата на этой странице недоступна.',
+  certificate_rebind_required: 'Для этого лица уже привязан другой сертификат. Выбери отдельную операцию замены TEST-сертификата; регистрация его не заменяет.',
+  invalid_binding_request: 'Проверь ID существующей TEST-привязки и SHA-256 нового сертификата: нужны UUID и 64 шестнадцатеричных символа. Ключ и пароль сюда не вводи.',
+  binding_not_found: 'Указанная TEST-привязка не найдена. Проверь ID из первоначальной квитанции.',
+  same_certificate: 'Этот сертификат уже привязан. Для замены нужен другой подходящий личный TEST-сертификат.',
+  replacement_certificate_mismatch: 'Подпись сделана не новым сертификатом, указанным в распоряжении. Замена не сохранена.',
+  stale_or_foreign_binding: 'Личность или текущая версия TEST-привязки не совпадает с распоряжением. Замена не сохранена; проверь ID и создай новое намерение.',
+  retired_certificate: 'Сертификат ранее заменён в этом TEST-реестре. Новая операция по нему отклонена; сохранённая квитанция остаётся только историей.',
   binding_storage_limit: 'Лимит локального реестра достигнут. Новая привязка не сохранена.',
   binding_intent_expired: 'Намерение истекло. Создай новое намерение и подпиши его.',
   network_error: 'Локальный сервер недоступен. Сохранённую в памяти подпись можно отправить повторно; совпадающий результат вернётся как историческая квитанция.',
@@ -36,10 +45,10 @@ function failure(code, retryAfter = 0) {
   return error;
 }
 
-export async function validatePersonalIntent(intent, now = Date.now(), cryptoImpl = globalThis.crypto) {
-  if (!intent || !idPattern.test(intent.id || '') || typeof intent.text !== 'string' ||
+export async function validatePersonalIntent(intent, now = Date.now(), cryptoImpl = globalThis.crypto, request = { action }) {
+  if (!intent || typeof intent.id !== 'string' || !idPattern.test(intent.id) || typeof intent.text !== 'string' ||
       intent.text.length > 65_536 || typeof intent.bytesBase64 !== 'string' || intent.bytesBase64.length > 90_000 ||
-      !hashPattern.test(intent.hash || '') || !Number.isSafeInteger(intent.expiresAt) || intent.expiresAt <= now ||
+      typeof intent.hash !== 'string' || !hashPattern.test(intent.hash) || !Number.isSafeInteger(intent.expiresAt) || intent.expiresAt <= now ||
       !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(intent.bytesBase64)) {
     throw failure('invalid_personal_response');
   }
@@ -50,14 +59,26 @@ export async function validatePersonalIntent(intent, now = Date.now(), cryptoImp
     if (new TextDecoder('utf-8', { fatal: true }).decode(bytes) !== intent.text) throw new Error();
     const intentData = JSON.parse(intent.text);
     if (!intentData || Array.isArray(intentData) || Object.keys(intentData).sort().join(',') !== intentKeys ||
-        intentData.action !== action || intentData.domain !== 'dalahold:test-person-binding:v1' ||
-        intentData.purpose !== intentPurpose || !hashPattern.test(intentData.sessionHash || '') ||
-        !hashPattern.test(intentData.mappingKeyId || '') || !Number.isSafeInteger(intentData.issuedAt) ||
+        intentData.action !== request.action || intentData.domain !== 'dalahold:test-person-binding:v1' ||
+        intentData.purpose !== intentPurpose || typeof intentData.sessionHash !== 'string' || !hashPattern.test(intentData.sessionHash) ||
+        typeof intentData.mappingKeyId !== 'string' || !hashPattern.test(intentData.mappingKeyId) || !Number.isSafeInteger(intentData.issuedAt) ||
         intentData.expiresAt !== intentData.issuedAt + 300_000 ||
         intentData.statusSource !== 'test_ocsp' || intentData.nonce !== intent.id ||
-        intentData.expiresAt !== intent.expiresAt || intentData.bindingId !== null ||
-        intentData.expectedEpoch !== null || intentData.previousCertificateDigest !== null ||
-        intentData.newCertificateDigest !== null) throw new Error();
+        intentData.expiresAt !== intent.expiresAt ||
+        JSON.stringify(intentData, null, 2) + '\n' !== intent.text) throw new Error();
+    if (request.action === action) {
+      if (Object.keys(request).join(',') !== 'action' ||
+          [intentData.bindingId, intentData.expectedEpoch, intentData.previousCertificateDigest,
+            intentData.newCertificateDigest].some(value => value !== null)) throw new Error();
+    } else if (request.action !== replacementAction ||
+        Object.keys(request).sort().join(',') !== 'action,bindingId,newCertificateDigest' ||
+        typeof request.bindingId !== 'string' || !idPattern.test(request.bindingId) ||
+        typeof request.newCertificateDigest !== 'string' || !hashPattern.test(request.newCertificateDigest) ||
+        intentData.bindingId !== request.bindingId || intentData.newCertificateDigest !== request.newCertificateDigest ||
+        !Number.isSafeInteger(intentData.expectedEpoch) || intentData.expectedEpoch < 0 ||
+        intentData.expectedEpoch >= Number.MAX_SAFE_INTEGER || typeof intentData.previousCertificateDigest !== 'string' ||
+        !hashPattern.test(intentData.previousCertificateDigest) ||
+        intentData.previousCertificateDigest === intentData.newCertificateDigest) throw new Error();
     const digest = new Uint8Array(await cryptoImpl.subtle.digest('SHA-256', bytes));
     if (Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('') !== intent.hash) throw new Error();
   } catch { throw failure('invalid_personal_response'); }
@@ -75,12 +96,18 @@ function validateStatus(value, now) {
 
 function validateReceipt(value, intent) {
   const receipt = value?.receipt;
-  if (typeof value?.historical !== 'boolean' || receipt?.scope !== scope || receipt.action !== action ||
+  const data = JSON.parse(intent.text);
+  if (typeof value?.historical !== 'boolean' || receipt?.scope !== scope || receipt.action !== data.action ||
       receipt.statusSource !== 'test_ocsp' || receipt.intentHash !== intent.hash ||
-      !idPattern.test(receipt.id || '') || !idPattern.test(receipt.bindingId || '') ||
-      !hashPattern.test(receipt.certificateDigest || '') || !Number.isSafeInteger(receipt.epoch) || receipt.epoch < 0 ||
+      typeof receipt.id !== 'string' || !idPattern.test(receipt.id) ||
+      typeof receipt.bindingId !== 'string' || !idPattern.test(receipt.bindingId) ||
+      typeof receipt.certificateDigest !== 'string' || !hashPattern.test(receipt.certificateDigest) ||
+      !Number.isSafeInteger(receipt.epoch) || receipt.epoch < 0 ||
       !Number.isSafeInteger(receipt.verifiedAt) || !Number.isSafeInteger(receipt.validUntil) ||
       receipt.validUntil <= receipt.verifiedAt) throw failure('invalid_personal_response');
+  if (data.action === replacementAction && (receipt.bindingId !== data.bindingId ||
+      receipt.certificateDigest !== data.newCertificateDigest || receipt.epoch !== data.expectedEpoch + 1))
+    throw failure('invalid_personal_response');
   return receipt;
 }
 
@@ -100,7 +127,7 @@ export function mountPersonalPage(document, {
   const current = operation => {
     if (disposed || operation !== generation || terminal) return false;
     if (ready && ready.sessionExpiresAt <= now()) {
-      endSession('Срок TEST-сессии истёк. Данные страницы очищены; начни новую сессию.');
+      endSession(sessionExpiryMessage);
       return false;
     }
     return true;
@@ -112,7 +139,7 @@ export function mountPersonalPage(document, {
   function clearEvidence() {
     intent = null; cms = null; receipt = null;
     $('intent').hidden = true; $('receipt').hidden = true;
-    for (const name of ['exact-bytes', 'base64', 'hash', 'intent-expiry', 'receipt-note', 'receipt-id',
+    for (const name of ['exact-bytes', 'base64', 'hash', 'intent-expiry', 'intent-summary', 'receipt-action', 'receipt-note', 'receipt-id',
       'receipt-hash', 'receipt-binding', 'receipt-epoch', 'receipt-certificate', 'receipt-verified',
       'receipt-until', 'receipt-source', 'receipt-scope']) $(name).textContent = '';
     $('receipt-kind').textContent = 'Тестовая квитанция';
@@ -122,6 +149,7 @@ export function mountPersonalPage(document, {
     ready = null; busy = false; terminal = true; cooldownUntil = 0;
     if (!preserveCloseToken) closeToken = null;
     clearEvidence();
+    $('action').value = action; $('binding-id').value = ''; $('new-certificate').value = '';
     $('sdk').textContent = 'Личная TEST-привязка: сессия завершена';
     $('session-expiry').textContent = 'Активной TEST-сессии на странице нет.';
     $('connection').textContent = 'NCALayer: новая операция не запрашивается';
@@ -131,7 +159,7 @@ export function mountPersonalPage(document, {
   function controls() {
     if (disposed) return;
     if (ready && ready.sessionExpiresAt <= now()) {
-      endSession('Срок TEST-сессии истёк. Данные страницы очищены; начни новую сессию.');
+      endSession(sessionExpiryMessage);
       return;
     }
     if (ready?.chain && ready.validUntil <= now()) {
@@ -143,7 +171,15 @@ export function mountPersonalPage(document, {
     $('refresh').disabled = blocked;
     $('connect').disabled = blocked;
     $('create').disabled = blocked || !ready?.chain;
-    $('sign').disabled = blocked || !ready?.chain || !fresh || Boolean(receipt);
+    const replacing = $('action').value === replacementAction;
+    $('action').disabled = blocked || !ready?.chain;
+    $('binding-id').disabled = blocked || !ready?.chain;
+    $('new-certificate').disabled = blocked || !ready?.chain;
+    $('replacement-fields').hidden = !replacing;
+    $('create').textContent = replacing ? 'Создать намерение замены' : 'Создать тестовое намерение';
+    // A retained CMS may already have committed after a lost response. Preserve
+    // that EXACT signature for history retry; never silently overwrite it.
+    $('sign').disabled = blocked || !ready?.chain || !fresh || Boolean(receipt) || Boolean(cms);
     // Identical history retry is intentionally usable after intent/status expiry.
     $('retry').disabled = blocked || !cms || !intent;
     $('close').disabled = closing || !(ready?.csrfToken || closeToken);
@@ -173,6 +209,11 @@ export function mountPersonalPage(document, {
   }
   function handleError(error) {
     const code = error.message;
+    // These explicit verifier/policy refusals happen before commit. Another
+    // certificate can sign the same still-live intent. Ambiguous failures retain
+    // the original CMS instead (network, malformed response, generic 503, etc.).
+    if (['binding_identity_rejected', 'organization_binding_disabled',
+      'replacement_certificate_mismatch', 'certificate_rebind_required'].includes(code)) cms = null;
     if (['personal_session_unavailable', 'personal_csrf_required'].includes(code)) {
       endSession(messages[code]);
       $('result').focus();
@@ -221,24 +262,35 @@ export function mountPersonalPage(document, {
     });
     if (!current(operation)) return;
     receipt = validateReceipt(result, submittedIntent);
+    const replacing = receipt.action === replacementAction;
     $('receipt-kind').textContent = result.historical ? 'Историческая TEST-квитанция' : 'Свежая TEST-квитанция';
     $('receipt-note').textContent = result.historical
       ? 'Получен сохранённый результат первоначальной проверки. Нового подтверждения статуса эта квитанция не создаёт; актуальный статус сертификата этим повтором не подтверждён.'
-      : 'Тестовая привязка сохранена. Сертификат и его TEST OCSP-статус проверены при этой операции.';
-    const fields = { id: receipt.id, hash: receipt.intentHash, binding: receipt.bindingId, epoch: receipt.epoch,
+      : replacing ? 'Сертификат заменён в TEST-реестре. ID привязки сохранён, версия увеличена; старый сертификат отклоняется для новых операций в этом реестре. Вход и бизнес-доступ не предоставлены.'
+        : 'Тестовая привязка сохранена. Сертификат и его TEST OCSP-статус проверены при этой операции.';
+    const fields = { action: replacing ? 'Замена TEST-сертификата' : 'Личная TEST-привязка',
+      id: receipt.id, hash: receipt.intentHash, binding: receipt.bindingId, epoch: receipt.epoch,
       certificate: receipt.certificateDigest, verified: formatDate(receipt.verifiedAt), until: formatDate(receipt.validUntil),
       source: 'Тестовый OCSP НУЦ · test_ocsp', scope: 'Только личная TEST-привязка · test_personal_binding_only' };
     for (const [name, value] of Object.entries(fields)) $(`receipt-${name}`).textContent = String(value);
+    if (!replacing && !$('binding-id').value) $('binding-id').value = receipt.bindingId;
     $('receipt').hidden = false;
     message(result.historical ? 'Историческая TEST-квитанция получена. Повтор не создаёт новую привязку.' : 'Свежая TEST-квитанция получена. Вход и бизнес-доступ не предоставлены.');
     $('receipt-kind').focus();
   }
-  function on(name, handler) {
+  function on(name, handler, eventName = 'click') {
     const element = $(name);
     const listener = () => { if (!element.disabled && !disposed) return handler(); };
-    element.addEventListener('click', listener);
-    listeners.push([element, listener]);
+    element.addEventListener(eventName, listener);
+    listeners.push([element, eventName, listener]);
   }
+  const edited = () => {
+    clearEvidence(); controls();
+    message('Операция или параметры изменены. Предыдущие намерение, подпись и квитанция на странице очищены; создай новое намерение.');
+  };
+  on('action', edited, 'change');
+  on('binding-id', edited, 'input');
+  on('new-certificate', edited, 'input');
   on('refresh', () => run(async (operation, signal) => {
     message('Проверяем готовность TEST-сессии…');
     if (await loadStatus(operation, signal)) message('TEST-сессия готова. Проверь NCALayer и создай намерение.');
@@ -251,24 +303,36 @@ export function mountPersonalPage(document, {
     message('NCALayer доступен. Соединение само по себе не подтверждает сертификат или TEST-привязку.');
   }));
   on('create', () => run(async (operation, signal) => {
+    const request = $('action').value === action ? { action } : {
+      action: $('action').value, bindingId: $('binding-id').value.trim().toLowerCase(),
+      newCertificateDigest: $('new-certificate').value.trim().toLowerCase() };
+    if (request.action !== action && (request.action !== replacementAction ||
+        !idPattern.test(request.bindingId) || !hashPattern.test(request.newCertificateDigest))) throw failure('invalid_binding_request');
     clearEvidence();
     message('Создаём точное намерение для личной TEST-привязки…');
     if (!await loadStatus(operation, signal)) return;
-    const result = await api('/api/personal-test/intents', { value: { action }, signal });
+    const result = await api('/api/personal-test/intents', { value: request, signal });
     if (!current(operation)) return;
-    const validated = await validatePersonalIntent(result.intent, now(), cryptoImpl);
+    const validated = await validatePersonalIntent(result.intent, now(), cryptoImpl, request);
     if (!current(operation)) return;
     if (validated.expiresAt <= now()) throw failure('binding_intent_expired');
     intent = validated;
+    const data = JSON.parse(intent.text);
+    $('intent-summary').textContent = data.action === replacementAction
+      ? `Замена TEST-сертификата · привязка ${data.bindingId} · версия ${data.expectedEpoch} → ${data.expectedEpoch + 1}. Старый: ${data.previousCertificateDigest}. Новый: ${data.newCertificateDigest}.`
+      : 'Личная TEST-привязка. Замена сертификата, вход и бизнес-доступ не запрашиваются.';
     $('exact-bytes').textContent = intent.text; $('base64').textContent = intent.bytesBase64; $('hash').textContent = intent.hash;
     $('intent').hidden = false;
-    message('Проверь точные данные намерения. Затем подпиши их TEST-контейнером физического лица.');
+    message(data.action === replacementAction ? 'Проверь ID, старый и новый отпечатки, версию и точные байты. Подпиши новым личным TEST-сертификатом той же личности.'
+      : 'Проверь точные данные намерения. Затем подпиши их TEST-контейнером физического лица.');
     $('exact-title').focus();
   }));
   on('sign', () => run(async (operation, signal) => {
     cms = null;
     if (!intent || intent.expiresAt <= now()) throw failure('binding_intent_expired');
-    message('Выбери TEST-контейнер физического лица для подписи в NCALayer. Пароль вводится только в его окне.');
+    message(JSON.parse(intent.text).action === replacementAction
+      ? 'В NCALayer выбери новый личный TEST-сертификат из намерения. Пароль вводится только в его окне.'
+      : 'Выбери TEST-контейнер физического лица для подписи в NCALayer. Пароль вводится только в его окне.');
     const signed = await ncalayer(signingRequest(intent, ready.chain));
     if (!current(operation)) return;
     controls();
@@ -290,11 +354,11 @@ export function mountPersonalPage(document, {
       if (disposed || generation !== closingGeneration) return;
       if (result.closed !== true || result.scope !== scope) throw failure('invalid_personal_response');
       closeToken = null;
-      message('TEST-сессия закрыта. Данные страницы очищены; поздние ответы не возобновят эту сессию.');
+      message('TEST-сессия закрыта. Данные страницы очищены; поздние ответы не возобновят эту сессию. Закрытие не отменяет уже сохранённые операции. При потерянном ответе результат остаётся неподтверждённым до проверки оператором реестра.');
     } catch (error) {
       if (disposed || generation !== closingGeneration) return;
       if (error.message === 'personal_session_unavailable') {
-        closeToken = null; message('Серверная TEST-сессия уже недоступна. Данные страницы очищены.');
+        closeToken = null; message('Серверная TEST-сессия уже недоступна. Данные страницы очищены. Закрытие не отменяет уже сохранённые операции; при потерянном ответе нужна проверка оператором реестра.');
       } else message('Данные страницы очищены, но сервер не подтвердил закрытие TEST-сессии. Повтори закрытие. Ожидающая серверная проверка ещё может завершиться.', true);
     } finally {
       if (!disposed && generation === closingGeneration) {
@@ -311,7 +375,7 @@ export function mountPersonalPage(document, {
     if (disposed) return;
     endSession('Страница закрыта. Локальные данные очищены.');
     disposed = true; clearIntervalImpl(interval);
-    for (const [element, listener] of listeners) element.removeEventListener('click', listener);
+    for (const [element, eventName, listener] of listeners) element.removeEventListener(eventName, listener);
   } };
 }
 

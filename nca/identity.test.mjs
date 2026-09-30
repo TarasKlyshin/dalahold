@@ -191,6 +191,55 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
         .every(field => !Object.hasOwn(result.receipt, field)));
       const repeated = await post('/api/personal-test/receipts', { intentId: intent.id, cms });
       assert.deepEqual(await repeated.json(), { ...result, historical: true });
+
+      // A fresh anonymous TEST session may propose a replacement, but only the
+      // exact eligible same-person personal CMS could commit it. These are REAL
+      // bundled negative signatures, not a positive same-profile renewal pair.
+      const replacementPage = await fetch(origin + '/personal/');
+      const replacementCookie = replacementPage.headers.get('set-cookie').split(';')[0];
+      const replacementStatus = await (await fetch(origin + '/api/personal-test/status',
+        { headers: { Cookie: replacementCookie } })).json();
+      const replacementPost = body => fetch(origin + '/api/personal-test/receipts', {
+        method: 'POST', headers: { Cookie: replacementCookie, Origin: origin,
+          'Content-Type': 'application/json', 'X-DalaHold-CSRF': replacementStatus.csrfToken },
+        body: JSON.stringify(body) });
+      const issuedReplacement = await fetch(origin + '/api/personal-test/intents', {
+        method: 'POST', headers: { Cookie: replacementCookie, Origin: origin,
+          'Content-Type': 'application/json', 'X-DalaHold-CSRF': replacementStatus.csrfToken },
+        body: JSON.stringify({ action: 'replace_test_certificate', bindingId: result.receipt.bindingId,
+          newCertificateDigest: director.certificateDigest }) });
+      assert.equal(issuedReplacement.status, 201);
+      const replaceIntent = (await issuedReplacement.json()).intent;
+      const replaceBytes = Buffer.from(replaceIntent.bytesBase64, 'base64');
+      for (const [mode, error] of [['legal-director','organization_binding_disabled'],
+        ['revoked','binding_identity_rejected'], ['wrong-purpose','binding_identity_rejected'],
+        ['sign','replacement_certificate_mismatch'], ['altered','binding_identity_rejected']]) {
+        const replaceCms = await sign(mode === 'altered' ? Buffer.concat([replaceBytes, Buffer.from('changed')]) : replaceBytes,
+          mode === 'altered' ? 'sign' : mode);
+        const refused = await replacementPost({ intentId: replaceIntent.id, cms: replaceCms.toString('base64') });
+        assert.equal(refused.status, 422); assert.deepEqual(await refused.json(), { error });
+        const check = new DatabaseSync(join(browserDirectory, 'personal.sqlite'), { readOnly: true });
+        try {
+          const current = check.prepare('SELECT certificate_digest, epoch FROM personal_bindings WHERE binding_id=?')
+            .get(result.receipt.bindingId);
+          assert.equal(current.certificate_digest, individual.certificateDigest); assert.equal(current.epoch, 0);
+          assert.equal(check.prepare('SELECT count(*) n FROM personal_bindings').get().n, 1);
+          assert.equal(check.prepare('SELECT count(*) n FROM retired_certificates').get().n, 0);
+          assert.equal(check.prepare('SELECT revision FROM binding_meta').get().revision, 3);
+          assert.equal(check.prepare('SELECT receipt_json FROM binding_intents WHERE id=?').get(replaceIntent.id).receipt_json, null);
+        } finally { check.close(); }
+      }
+      const replaceCms = (await sign(replaceBytes, 'sign')).toString('base64');
+      for (let retry = 0; retry < 2; retry++) {
+        const refused = await replacementPost({ intentId: replaceIntent.id, cms: replaceCms });
+        assert.equal(refused.status, 422);
+        assert.deepEqual(await refused.json(), { error: 'replacement_certificate_mismatch' });
+      }
+      const replacementClosed = await fetch(origin + '/api/personal-test/session/close', {
+        method: 'POST', headers: { Cookie: replacementCookie, Origin: origin,
+          'Content-Type': 'application/json', 'X-DalaHold-CSRF': replacementStatus.csrfToken }, body: '{}' });
+      assert.equal(replacementClosed.status, 200);
+      assert.equal((await replacementPost({ intentId: replaceIntent.id, cms: replaceCms })).status, 401);
       assert.equal((await post('/api/personal-test/session/close', {})).status, 200);
       assert.equal((await post('/api/personal-test/receipts', { intentId: intent.id, cms })).status, 401);
     } finally {
@@ -221,5 +270,5 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
     try { assert.deepEqual(reopened.owner(owner.ownerId), { ...owner,
       certificateId: director.certificateDigest, authEpoch: 1 }); }
     finally { reopened.close(); }
-    t.diagnostic('Genuine TEST personal enrollment/library/current-backup/restart and opt-in HTTP enrollment/retry/close pass; corporate/revoked/wrong-purpose/tampered CMS refuse through HTTP. Positive personal renewal remains synthetic only: no eligible second bundled personal certificate. No manual enrollment UAT, identity login, corporate powers or wallet.');
+    t.diagnostic('Genuine TEST personal enrollment/library/current-backup/restart and opt-in HTTP enrollment/retry/close pass; genuine corporate/revoked/wrong-purpose/tampered and mismatched-candidate replacement CMS refuse through HTTP without changing binding/epoch or consuming the intent. Positive personal renewal remains synthetic only: no eligible second bundled personal certificate. No manual renewal UAT, identity login, corporate powers or wallet.');
   });

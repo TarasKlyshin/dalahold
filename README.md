@@ -12,6 +12,12 @@ is now human-confirmed, with one durable receipt/no duplicate and a current
 revision2 backup read back independently. Agent browser QA remains blocked by
 the browser service's access-policy check; closure itself relies on the human report.
 
+The same page now prepares a separate [TEST certificate-replacement intent](.planning/spikes/017-browser-certificate-replacement/README.md).
+Model HTTP/client tests prove stable binding ID, next epoch, retired-credential
+refusal and one-receipt retry. Genuine bundled SDK signatures prove replacement
+negatives only. Positive genuine renewal still requires a second eligible personal
+TEST certificate; neither browser QA nor business access is accepted.
+
 ## The problem
 
 Farmers and buyers can agree on terms across messages and documents, then disagree about what was accepted, delivered, or paid. DalaHold is exploring a shared, versioned deal record that makes each party's statements and supporting evidence visible without presenting a photo or an on-chain record as proof of physical delivery.

@@ -12,12 +12,12 @@ const initialTime = Date.UTC(2026, 8, 30, 12);
 const intentId = '11111111-1111-4111-8111-111111111111';
 const receiptId = '22222222-2222-4222-8222-222222222222';
 const bindingId = '33333333-3333-4333-8333-333333333333';
-function intentFixture(time = initialTime) {
+function intentFixture(time = initialTime, fields = {}) {
   const text = JSON.stringify({ domain: 'dalahold:test-person-binding:v1',
     purpose: 'ТЕСТОВАЯ ЛИЧНАЯ ПРИВЯЗКА. Вход, корпоративные полномочия, кошелёк и платёж не разрешаются.',
     action: 'enroll_test_person', nonce: intentId, sessionHash: '4'.repeat(64), mappingKeyId: '5'.repeat(64),
     issuedAt: time, expiresAt: time + 300_000, statusSource: 'test_ocsp', bindingId: null, expectedEpoch: null,
-    previousCertificateDigest: null, newCertificateDigest: null }, null, 2) + '\n';
+    previousCertificateDigest: null, newCertificateDigest: null, ...fields }, null, 2) + '\n';
   return { id: intentId, text, bytesBase64: Buffer.from(text).toString('base64'),
     hash: createHash('sha256').update(text).digest('hex'), expiresAt: time + 300_000 };
 }
@@ -27,8 +27,10 @@ function statusFixture(time = initialTime) {
     csrfToken: 'c'.repeat(43), sessionExpiresAt: time + 600_000 };
 }
 function receiptFixture(intent = intentFixture(), historical = false) {
-  return { receipt: { id: receiptId, intentHash: intent.hash, action: 'enroll_test_person', bindingId,
-    epoch: 0, certificateDigest: '6'.repeat(64), verifiedAt: initialTime, validUntil: initialTime + 900_000,
+  const data = JSON.parse(intent.text);
+  return { receipt: { id: receiptId, intentHash: intent.hash, action: data.action, bindingId,
+    epoch: data.expectedEpoch === null ? 0 : data.expectedEpoch + 1,
+    certificateDigest: data.newCertificateDigest || '6'.repeat(64), verifiedAt: initialTime, validUntil: initialTime + 900_000,
     statusSource: 'test_ocsp', scope }, historical };
 }
 function response(value, status = 200, retryAfter = null) {
@@ -55,7 +57,7 @@ function documentFixture() {
     const classes = new Set((attributes.get('class') || '').split(/\s+/));
     const listeners = new Map();
     const element = { tagName: match[1].toUpperCase(), attributes, textContent: '',
-      disabled: attributes.has('disabled'), hidden: attributes.has('hidden'),
+      disabled: attributes.has('disabled'), hidden: attributes.has('hidden'), value: attributes.get('value') || '',
       setAttribute(name, value) { attributes.set(name, value); },
       getAttribute(name) { return attributes.get(name) ?? null; },
       classList: { toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); },
@@ -64,8 +66,13 @@ function documentFixture() {
       removeEventListener(name, fn) { if (listeners.get(name) === fn) listeners.delete(name); },
       focus() { document.activeElement = element; },
       click() { if (!this.disabled) return listeners.get('click')?.(); },
+      dispatch(name) { if (!this.disabled) return listeners.get(name)?.(); },
     };
     elements.set(id, element);
+    if (element.tagName === 'SELECT') {
+      const block = html.slice(match.index).split('</select>')[0];
+      element.value = /<option value="([^"]+)"/.exec(block)?.[1] || '';
+    }
   }
   return document;
 }
@@ -119,7 +126,11 @@ test('served personal HTML has semantic, labelled controls and independent works
   assert.match(html, /Физическое лицо/);
   assert.match(css, /min-height: 44px/);
   assert.match(css, /personal-skip:focus/);
-  assert.doesNotMatch(html, /<input|download=|export|ИИН:\s*</);
+  for (const name of ['action','binding-id','new-certificate']) {
+    assert.match(html, new RegExp(`<label[^>]*for="personal-${name}"`));
+    assert.equal(document.getElementById(`personal-${name}`).getAttribute('autocomplete'), 'off');
+  }
+  assert.doesNotMatch(html, /type="(?:file|password)"|download=|export|ИИН:\s*</);
   assert.doesNotMatch(client, /console\.|localStorage|sessionStorage|indexedDB|createObjectURL/);
 });
 
@@ -139,6 +150,183 @@ test('intent text, canonical base64, digest and permitted enrollment fields must
   await assert.rejects(validatePersonalIntent({ ...valid, text: extraSubject,
     bytesBase64: Buffer.from(extraSubject).toString('base64'), hash: createHash('sha256').update(extraSubject).digest('hex') },
   initialTime, webcrypto), /invalid_personal_response/);
+});
+
+const replacementRequest = { action: 'replace_test_certificate', bindingId, newCertificateDigest: '7'.repeat(64) };
+const replacementFixture = fields => intentFixture(initialTime, { ...replacementRequest,
+  expectedEpoch: 0, previousCertificateDigest: '6'.repeat(64), ...fields });
+function chooseReplacement(h, request = replacementRequest) {
+  h.$('action').value = request.action; h.$('action').dispatch('change');
+  h.$('binding-id').value = request.bindingId; h.$('binding-id').dispatch('input');
+  h.$('new-certificate').value = request.newCertificateDigest; h.$('new-certificate').dispatch('input');
+}
+
+test('replacement validation binds requested action, ID, new digest and canonical exact bytes', async () => {
+  const valid = replacementFixture();
+  assert.equal(await validatePersonalIntent(valid, initialTime, webcrypto, replacementRequest), valid);
+  await assert.rejects(validatePersonalIntent(valid, initialTime, webcrypto), /invalid_personal_response/);
+  for (const data of [{ bindingId: receiptId }, { newCertificateDigest: '8'.repeat(64) },
+    { previousCertificateDigest: '7'.repeat(64) }, { expectedEpoch: -1 }, { expectedEpoch: Number.MAX_SAFE_INTEGER }])
+    await assert.rejects(validatePersonalIntent(replacementFixture(data), initialTime, webcrypto, replacementRequest), /invalid_personal_response/);
+  const noncanonical = { ...valid, text: JSON.stringify(JSON.parse(valid.text)) };
+  noncanonical.bytesBase64 = Buffer.from(noncanonical.text).toString('base64');
+  noncanonical.hash = createHash('sha256').update(noncanonical.text).digest('hex');
+  await assert.rejects(validatePersonalIntent(noncanonical, initialTime, webcrypto, replacementRequest), /invalid_personal_response/);
+});
+
+test('invalid replacement fields never issue an intent or open NCALayer', async () => {
+  let signatures = 0;
+  const h = await harness({ signer: async () => { signatures++; return 'Y21z'; } });
+  chooseReplacement(h, { ...replacementRequest, bindingId: 'bad' });
+  await h.click('create'); assert.match(h.$('result').textContent, /ID|отпечаток/);
+  h.$('binding-id').value = bindingId; h.$('new-certificate').value = 'not-a-hash';
+  await h.click('create');
+  assert.equal(h.requests.filter(r => r.path.endsWith('/intents')).length, 0);
+  assert.equal(h.$('sign').disabled, true); assert.equal(signatures, 0); h.mounted.dispose();
+});
+
+test('replacement UI sends only selected target fields and renders same ID, next epoch and historical retry', async () => {
+  const issued = replacementFixture(); let signedRequest;
+  const h = await harness({ route(path, options, requests) {
+    if (path.endsWith('/intents')) return response({ intent: issued }, 201);
+    if (path.endsWith('/receipts')) return response(receiptFixture(issued,
+      requests.filter(r => r.path.endsWith('/receipts')).length > 1));
+  }, signer: async request => { signedRequest = request; return 'Y21z'; } });
+  chooseReplacement(h);
+  await h.click('create');
+  const request = h.requests.find(r => r.path.endsWith('/intents'));
+  assert.deepEqual(JSON.parse(request.options.body), replacementRequest);
+  assert.equal(h.$('replacement-fields').hidden, false);
+  assert.match(h.$('intent-summary').textContent, /0.*1/);
+  await h.click('sign'); assert.equal(signedRequest.args.data, issued.bytesBase64);
+  assert.equal(h.$('receipt-binding').textContent, bindingId); assert.equal(h.$('receipt-epoch').textContent, '1');
+  assert.match(h.$('receipt-action').textContent, /Замена/);
+  assert.match(h.$('receipt-note').textContent, /Сертификат заменён/);
+  await h.click('retry'); assert.match(h.$('receipt-kind').textContent, /Историческая/);
+  assert.match(h.$('receipt-note').textContent, /актуальный статус.*не подтверждён/);
+  await h.click('close');
+  assert.equal(h.$('binding-id').value, ''); assert.equal(h.$('new-certificate').value, '');
+  assert.equal(h.$('receipt').hidden, true); h.mounted.dispose();
+});
+
+test('server substitution of replacement target or enrollment action is refused before signing', async () => {
+  for (const issued of [replacementFixture({ bindingId: receiptId }), replacementFixture({ newCertificateDigest: '8'.repeat(64) }), intentFixture()]) {
+    let signatures = 0;
+    const h = await harness({ route: path => path.endsWith('/intents') ? response({ intent: issued },201) : undefined,
+      signer: async () => { signatures++; return 'Y21z'; } });
+    chooseReplacement(h); await h.click('create'); await h.click('sign');
+    assert.equal(h.$('intent').hidden, true); assert.equal(signatures, 0);
+    assert.match(h.$('result').textContent, /не прошёл проверку/); h.mounted.dispose();
+  }
+});
+
+test('replacement receipt must match action, binding ID, candidate digest and exact next epoch', async () => {
+  const issued = replacementFixture();
+  for (const altered of [{ action: 'enroll_test_person' }, { bindingId: receiptId },
+    { certificateDigest: '6'.repeat(64) }, { epoch: 0 }, { epoch: 2 }]) {
+    const result = receiptFixture(issued); Object.assign(result.receipt, altered);
+    const h = await harness({ route: path => path.endsWith('/intents') ? response({ intent: issued },201) :
+      path.endsWith('/receipts') ? response(result) : undefined });
+    chooseReplacement(h); await h.click('create'); await h.click('sign');
+    assert.equal(h.$('receipt').hidden, true); assert.match(h.$('result').textContent, /не прошёл проверку/);
+    h.mounted.dispose();
+  }
+});
+
+test('editing replacement fields or switching operation invalidates old intent and CMS before another signature', async () => {
+  const issued = replacementFixture();
+  const h = await harness({ route: path => path.endsWith('/intents') ? response({ intent: issued },201) : undefined });
+  chooseReplacement(h); await h.click('create');
+  h.$('new-certificate').value = '8'.repeat(64); h.$('new-certificate').dispatch('input');
+  assert.equal(h.$('intent').hidden, true); assert.equal(h.$('sign').disabled, true);
+  assert.equal(h.$('retry').disabled, true);
+  h.$('action').value = 'enroll_test_person'; h.$('action').dispatch('change');
+  assert.equal(h.$('replacement-fields').hidden, true); assert.equal(h.$('intent').hidden, true);
+  h.mounted.dispose();
+});
+
+test('closing during replacement signing clears form and ignores late CMS without submitting it', async () => {
+  const signing = deferred(), issued = replacementFixture();
+  const h = await harness({ signer: () => signing.promise,
+    route: path => path.endsWith('/intents') ? response({ intent: issued },201) : undefined });
+  chooseReplacement(h); await h.click('create'); const pending = h.click('sign');
+  assert.equal(h.$('action').disabled, true); assert.equal(h.$('binding-id').disabled, true);
+  await h.click('close'); signing.resolve('Y21z'); await pending;
+  assert.equal(h.$('binding-id').value, ''); assert.equal(h.$('new-certificate').value, '');
+  assert.equal(h.requests.filter(r => r.path.endsWith('/receipts')).length, 0);
+  assert.equal(h.$('intent').hidden, true); h.mounted.dispose();
+});
+
+test('ambiguous replacement response preserves EXACT CMS, blocks re-sign and allows only exact retry until explicit reset', async () => {
+  const issued = replacementFixture(); let signatures = 0, submits = 0;
+  const h = await harness({ signer: async () => { signatures++; return signatures === 1 ? 'Y21z' : 'YW5vdGhlcg=='; },
+    route(path) {
+      if(path.endsWith('/intents')) return response({ intent: issued },201);
+      if(path.endsWith('/receipts')) {
+        if(++submits===1) throw new Error('lost committed response');
+        return response(receiptFixture(issued,true));
+      }
+    } });
+  chooseReplacement(h); await h.click('create'); await h.click('sign');
+  assert.equal(h.$('sign').disabled, true); assert.equal(h.$('retry').disabled, false);
+  await h.click('sign'); assert.equal(signatures, 1);
+  await h.click('retry'); assert.match(h.$('receipt-kind').textContent, /Историческая/);
+  const payloads = h.requests.filter(r=>r.path.endsWith('/receipts')).map(r=>JSON.parse(r.options.body));
+  assert.deepEqual(payloads[0],payloads[1]); h.mounted.dispose();
+});
+
+test('explicit pre-commit certificate rejection permits re-signing but a malformed response retains the original CMS', async () => {
+  const issued = replacementFixture();
+  for(const code of ['binding_identity_rejected','organization_binding_disabled','replacement_certificate_mismatch','invalid_personal_response']) {
+    const h = await harness({ route: path=>path.endsWith('/intents') ? response({intent:issued},201) :
+      path.endsWith('/receipts') ? code==='invalid_personal_response' ? response({}) : response({error:code},422) : undefined });
+    chooseReplacement(h); await h.click('create'); await h.click('sign');
+    const ambiguous=code==='invalid_personal_response';
+    assert.equal(h.$('sign').disabled, ambiguous); assert.equal(h.$('retry').disabled, !ambiguous);
+    h.mounted.dispose();
+  }
+});
+
+test('closing before delivery of an already committed replacement clears display but does not claim cancellation', async () => {
+  const delivered=deferred(),issued=replacementFixture(); let committed=false;
+  const h=await harness({route:path=>{
+    if(path.endsWith('/intents')) return response({intent:issued},201);
+    if(path.endsWith('/receipts')) { committed=true; return delivered.promise; }
+  }});
+  chooseReplacement(h); await h.click('create'); const pending=h.click('sign');
+  // Let the controlled signer/API promise reach the simulated commit boundary.
+  await new Promise(resolve=>setImmediate(resolve)); assert.equal(committed,true);
+  await h.click('close'); delivered.resolve(response(receiptFixture(issued))); await pending;
+  assert.equal(h.$('receipt').hidden,true); assert.match(h.$('result').textContent,/не отменяет уже сохранённые/);
+  assert.match(html,/Если ответ потерян/); h.mounted.dispose();
+});
+
+test('expiry before delivery of an already committed replacement warns that clearing is not cancellation', async () => {
+  for (const timerTick of [false, true]) {
+    const delivered = deferred(), issued = replacementFixture(); let committed = false;
+    const h = await harness({ route: path => {
+      if (path.endsWith('/intents')) return response({ intent: issued }, 201);
+      if (path.endsWith('/receipts')) { committed = true; return delivered.promise; }
+    } });
+    chooseReplacement(h); await h.click('create'); const pending = h.click('sign');
+    await new Promise(resolve => setImmediate(resolve)); assert.equal(committed, true);
+    h.advance(600_001, timerTick);
+    delivered.resolve(response(receiptFixture(issued))); await pending;
+    assert.equal(h.$('receipt').hidden, true); assert.equal(h.$('hash').textContent, '');
+    assert.equal(h.$('retry').disabled, true); assert.equal(h.$('new-session').hidden, false);
+    assert.match(h.$('result').textContent, /не отменяет уже сохранённые операции/);
+    assert.match(h.$('result').textContent, /проверка оператором реестра/);
+    h.mounted.dispose();
+  }
+});
+
+test('array-valued receipt ID, binding ID and certificate digest are not accepted even for enrollment', async () => {
+  for(const field of ['id','bindingId','certificateDigest']){
+    const result=receiptFixture();result.receipt[field]=[result.receipt[field]];
+    const h=await harness({route:path=>path.endsWith('/receipts') ? response(result) : undefined});
+    await h.click('create');await h.click('sign');assert.equal(h.$('receipt').hidden,true);
+    assert.match(h.$('result').textContent,/не прошёл проверку/);h.mounted.dispose();
+  }
 });
 
 test('happy path uses exact server bytes, CSRF JSON writes, scoped receipt and focus', async () => {
@@ -287,6 +475,7 @@ test('session expiry during signing or before late HTTP receipt clears secrets a
     assert.equal(page.$('close').disabled, true);
     assert.equal(page.$('new-session').hidden, false);
     assert.match(page.$('result').textContent, /Срок TEST-сессии истёк/);
+    assert.match(page.$('result').textContent, /не отменяет уже сохранённые операции/);
   }
 });
 
@@ -316,6 +505,8 @@ test('missing session and CSRF rejection clear state and require a new session',
     assert.equal(page.$('retry').disabled, true);
     assert.equal(page.$('new-session').hidden, false);
     assert.equal(page.document.activeElement, page.$('result'));
+    assert.match(page.$('result').textContent, /не отменяет уже сохранённые операции/);
+    assert.match(page.$('result').textContent, /проверка оператором реестра/);
   }
 });
 

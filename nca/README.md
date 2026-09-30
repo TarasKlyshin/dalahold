@@ -58,10 +58,14 @@ the response contains one. `TestCmsSigner` labels this diagnostic
 OCSP fallback is enabled. The separate adapter above now validates these
 conditions; it does not call that utility for acceptance.
 
-Current verification: 161 Node cases + 7 offline Solana cases; 4 additional SDK
+Current explicitly enumerated verification: 177 Node cases +7 offline Solana cases; 4 additional SDK
 runs (default CRL refusal, 47 signed synthetic/transport checks, live TEST OCSP
 CMS-to-HTTP acceptance including genuine bundled revoked/wrong-purpose
 certificate refusals, plus identity/parser/offline-storage compatibility).
+The separate [Spike017](../.planning/spikes/017-browser-certificate-replacement/README.md)
+adds 23 personal HTTP and 30 client cases, plus genuine SDK replacement negatives.
+Positive same-profile renewal is model-only; no eligible second certificate or
+real replacement browser UAT exists.
 Synthetic responses separately establish policy and
 transport behavior. The genuine revoked fixture returns trusted, bound, fresh
 TEST OCSP `revoked`; the wrong-purpose fixture is refused before status lookup.
@@ -325,8 +329,10 @@ for backup evidence; this still does not enable account authentication.
 
 [Spike 016](../.planning/spikes/016-browser-personal-test/README.md) connects a
 separate `/personal/` page to personal TEST enrollment evidence, **not identity
-login**. It accepts only `enroll_test_person`, not certificate replacement,
-corporate powers, a wallet or business operations. The existing `/` signature
+login**. Spike016 originally exposed only `enroll_test_person`;
+[Spike017](../.planning/spikes/017-browser-certificate-replacement/README.md) now
+adds explicit `replace_test_certificate` intents with target ID/new public digest.
+Neither action enables corporate powers, a wallet or business operations. The existing `/` signature
 probe remains independent; its historical receipts cannot enroll a person.
 
 Explicit opt-in requires BOTH existing private paths and explicit TEST OCSP:
@@ -390,6 +396,25 @@ The separate [manual TEST enrollment/retry/close checkpoint](../.planning/spikes
 is now human-confirmed; one durable binding/receipt and no duplicate were read
 back independently. Session closure is human-confirmed, not proven by DB counts;
 automatic real-browser QA and genuine same-person renewal remain open.
+
+### Explicit TEST replacement interface, 30 September 2026
+
+Choose **Замена TEST-сертификата**, enter the ID from the original personal receipt
+and the candidate's SHA-256 X.509 DER digest. The server supplies the current epoch
+and old digest; review these exact bytes before manually signing with the NEW
+eligible personal TEST certificate. There is no private-container/password upload.
+Creating an intent advances the checkpoint but does NOT replace a certificate.
+Only fresh verified same-person CMS for that exact candidate can atomically update
+the binding/epoch/retirement/receipt. Edits clear local intent/CMS; close/expiry
+suppresses late work. Same CMS retry returns the same historical receipt.
+
+The SDK has only one eligible current personal certificate; its other current
+personal certificate is OCSP-revoked, and both old personal certificates expired
+in 2025. Corporate profiles cannot serve as personal renewals even for the same
+IIN. This interface is prepared, with model positive coverage and genuine SDK
+HTTP negatives. Positive genuine renewal/full browser QA are not accepted.
+See [Spike017](../.planning/spikes/017-browser-certificate-replacement/README.md)
+for the exact contract, tests, runtime readback and future manual acceptance.
 
 ## Start and check
 

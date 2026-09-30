@@ -1,4 +1,4 @@
-// Bounded browser enrollment evidence only. A TEST session is NOT identity auth.
+// Bounded browser personal binding evidence only. A TEST session is NOT identity auth.
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
 const COOKIE = 'dalahold_personal_test';
@@ -55,6 +55,8 @@ export function createPersonalTestHandler({ bindings, inspect, readBody, now = D
       invalid_binding_submission: 400, invalid_binding_request: 400,
       content_type: 415, body_too_large: 413, invalid_body: 400,
       organization_binding_disabled: 422, binding_identity_rejected: 422,
+      replacement_certificate_mismatch: 422, stale_or_foreign_binding: 409,
+      same_certificate: 409, binding_not_found: 404,
       binding_replay_conflict: 409, certificate_rebind_required: 409, retired_certificate: 409,
       binding_intent_not_found: 404, binding_intent_expired: 410, binding_status_expired: 503,
       verifier_busy: 503, status_unavailable: 503 };
@@ -104,17 +106,26 @@ export function createPersonalTestHandler({ bindings, inspect, readBody, now = D
         }
         if (pathname === '/api/personal-test/intents' && req.method === 'POST') {
           const input = await readBody(req);
-          if (Object.keys(input).join(',') !== 'action' || input.action !== 'enroll_test_person') throw error('invalid_binding_request', 400);
+          const keys = Object.keys(input).sort().join(',');
+          const enroll = input.action === 'enroll_test_person' && keys === 'action';
+          const replace = input.action === 'replace_test_certificate' &&
+            keys === 'action,bindingId,newCertificateDigest' && typeof input.bindingId === 'string' &&
+            UUID.test(input.bindingId) && typeof input.newCertificateDigest === 'string' &&
+            HEX.test(input.newCertificateDigest);
+          if (!enroll && !replace) throw error('invalid_binding_request', 400);
           assertCurrent();
           limit(entry.limits, 'issue', 3); limit(globals, 'issue', 12);
           await inspect(); assertCurrent();
+          // ID/digest choose only the proposed target, never verified identity.
+          // The store pins current epoch/old digest and requires a fresh eligible
+          // CMS from the SAME personal identity and exact candidate before commit.
           const intent = bindings.createIntent(hash(session.token), input, { assertCurrent });
           return send(res, 201, { intent: { id: intent.id, text: intent.bytes.toString('utf8'),
             bytesBase64: intent.bytes.toString('base64'), hash: intent.hash, expiresAt: intent.expiresAt } });
         }
         if (pathname === '/api/personal-test/receipts' && req.method === 'POST') {
           const input = await readBody(req);
-          if (Object.keys(input).sort().join(',') !== 'cms,intentId' || !UUID.test(input.intentId || '') ||
+          if (Object.keys(input).sort().join(',') !== 'cms,intentId' || typeof input.intentId !== 'string' || !UUID.test(input.intentId) ||
               typeof input.cms !== 'string' || input.cms.length > 131072 ||
               !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input.cms)) throw error('invalid_binding_submission', 400);
           const cms = Buffer.from(input.cms, 'base64');

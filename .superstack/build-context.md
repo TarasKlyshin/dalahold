@@ -81,6 +81,13 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
   independently read back. Closure itself relies on the human report. No identity
   login/account/grant or eligible renewal pair is claimed. Default personal API
   stays disabled; operator opt-in uses the existing private registry.
+  Spike017 adds an explicit personal TEST replacement action through the same
+  page/API. Target ID/digest is not ownership; only exact fresh same-person CMS
+  can commit the pinned epoch/digests. Model tests prove stable ID/next epoch,
+  retirement, competing/identical replay and closure. Genuine SDK HTTP tests
+  prove negatives, not positive renewal. No key/password upload exists; the SDK
+  has no eligible pair. Operator state/key/current revision2 backup are unchanged;
+  real-browser policy still blocks visual/keyboard/console acceptance.
 
 ## Build status
 
@@ -97,7 +104,7 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 
 `mvp_complete: false`
 
-`tests_passing: true` (latest code gates: 161 Node + 7 offline Solana, plus 4 SDK runs, as of 2026-09-30; not rerun for the documentation-only UAT checkpoint. Supervised signature-probe UAT passed; narrow personal enrollment/retry/close now human-confirmed, one receipt/no duplicate and current revision2 backup independently read back. Closure relies on the human report; agent browser-policy verification still blocks keyboard/responsive/real-cookie observations. Not identity-login/business-grant or devnet acceptance.)
+`tests_passing: true` (latest explicitly enumerated code gates: 177 Node +7 offline Solana, plus 4 SDK runs, as of 2026-09-30. Spike017 has 23 personal HTTP/30 client cases and genuine SDK replacement negatives; positive renewal remains model-only. Supervised signature-probe UAT passed; narrow personal enrollment/retry/close human-confirmed, one receipt/no duplicate and unchanged current revision2 backup independently read back. Closure relies on the human report; agent browser-policy verification still blocks keyboard/responsive/real-cookie observations. Not identity-login/business-grant or devnet acceptance.)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)
