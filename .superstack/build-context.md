@@ -72,6 +72,12 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
   review led to history MAC, expiry, joint-write, concurrent backup and bootstrap
   fixes. Whole-volume rollback, encrypted production custody, physical-fault
   acceptance and public authorization remain open; no independent hardware claim.
+  A separate opt-in `/personal/` page now supports exact personal TEST enrollment
+  evidence with bounded server-issued session/CSRF and shared verifier slots.
+  Genuine SDK CMS through HTTP enrolls/retries/closes; corporate/revoked/wrong-
+  purpose/altered CMS refuse. Closing/expiring a session while SDK awaits refuses
+  before joint commit. No identity login/account/grant, manual enrollment UAT or
+  eligible personal renewal pair is claimed. Default personal API stays disabled.
 
 ## Build status
 
@@ -88,7 +94,7 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 
 `mvp_complete: false`
 
-`tests_passing: true` (126 Node + 7 offline Solana cases, plus 4 SDK runs including 47 OCSP and 30 subject-parser checks, CRL refusal, live TEST OCSP HTTP/genuine negatives and genuine personal-binding/checkpoint/backup checks, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed, not browser-owner/business-grant or devnet acceptance)
+`tests_passing: true` (159 Node + 7 offline Solana cases, plus 4 SDK runs including 47 OCSP and 30 subject-parser checks, CRL refusal, live TEST OCSP HTTP/genuine negatives and personal-binding/checkpoint/backup/browser-HTTP checks, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed. Opt-in personal listener runs locally; browser navigation reached its page but mandatory browser-policy verification blocked subsequent UI/keyboard/responsive QA. Not manual personal-enrollment/identity-login/business-grant or devnet acceptance.)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)
@@ -298,3 +304,26 @@ The dated handoffs below preserve earlier checkpoints, not current gate status.
 - Next gate: durable mapping-key protection/recovery, personal/organization policy,
   dedicated exact enrolment/rebind intents and atomic current-state checks, same-
   role replacement fixtures and independent review. Corporate powers/devnet closed.
+
+## 2026-09-30 browser personal TEST enrollment
+
+- Baseline clean local `main` at `0a0c86bae2ba70fefedffb82d086f24421e5f30a`.
+  Spike 016 connects the existing retained-checkpoint personal registry to an
+  opt-in `/personal/` page. Separate server-issued 15-minute TEST session, CSRF,
+  request/body/rate bounds, shared two-SDK limit and transactional session guards.
+  Enrollment evidence only; no identity login, corporate powers, rebind route,
+  wallet, money, signed deal or devnet enabled.
+- 159 Node + 7 offline Solana and 4 SDK runs pass without skips. Genuine bundled
+  personal CMS passes isolated HTTP enrollment/history/close; corporate/revoked/
+  wrong-purpose/altered evidence refuses. Narrow internal read-only review is
+  not full independent production review or confirmed Claude review.
+- Protected signature DB backup taken before normal stop of exact PID 27184.
+  Opt-in loopback listener PID 81836 started 18:57:01 Asia/Almaty. Prior supervised
+  signature-only receipt matches backup after restart; no identity upgrade.
+  Original personal key preserved; live/checkpoint/current pair still revision0,
+  with zero bindings/intents/receipts. Legacy initial pair refuses as current.
+- Actual browser reload/link click reached the personal page, then mandatory
+  browser access-policy verification blocked further observation twice. No
+  bypass or UI/keyboard/responsive/screenshot success claimed. Manual personal
+  NCALayer enrollment is also open. Next: recover browser QA, then human TEST
+  physical-person signing/retry/close and new backup at the advanced revision.

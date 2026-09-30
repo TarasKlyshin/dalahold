@@ -4,6 +4,12 @@ Evidence-led agricultural deals in Kazakhstan, with transaction-specific e-signa
 
 > Status: discovery, architecture planning, a clickable UX prototype, and a loopback-only API that saves versioned unsigned local deal drafts, their fingerprints and metadata-only document markers. A separate offline test policy and SQLite ledger model deal decisions with a frozen terms snapshot and internal demo record; they are not connected to the browser or a real identity provider. A separate local NCALayer/API/Java stand passes SDK-generated CMS and supervised browser signing → strict TEST OCSP → one-use test receipt, plus historical retry. Genuine bundled revoked/wrong-purpose certificates refuse without consuming the request or creating a receipt. Default CRL mode still refuses incompatible official test base/delta CRLs; there is no automatic fallback. The selected file's bytes and name are not uploaded automatically; user-entered descriptions do persist. Neither a fingerprint, marker nor this test-signature receipt proves a real user's signed deal, corporate powers or file authenticity. Stable owner binding, certificate rotation, signed two-party deals, devnet execution, live escrow, digital-tenge integration and production payments remain unimplemented or unaccepted.
 
+A separate opt-in [personal TEST-enrollment page](nca/README.md) now connects
+server-issued sessions/CSRF to the retained local binding registry. Genuine
+SDK-generated personal CMS passes isolated HTTP enrollment/retry/close; this is
+not authenticated account access. Remaining browser QA is blocked by the browser
+service's access-policy check, and manual personal NCALayer enrollment is pending.
+
 ## The problem
 
 Farmers and buyers can agree on terms across messages and documents, then disagree about what was accepted, delivered, or paid. DalaHold is exploring a shared, versioned deal record that makes each party's statements and supporting evidence visible without presenting a photo or an on-chain record as proof of physical delivery.
@@ -30,6 +36,7 @@ The first planned vertical is a livestock deal. The grain/oilseed alternative re
 - [Spike 013](.planning/spikes/013-test-subject-identity/README.md) — internal opaque TEST person/organization mapping and genuine CMS/offline-store replacement checks; not browser enrolment, corporate authority or a real wallet.
 - [Spike 014](.planning/spikes/014-personal-binding-intents/README.md) — protected TEST mapping key, dedicated personal enrollment/replacement intents, atomic replay/retirement and backup/restart; genuine personal enrollment passes, positive renewal is synthetic only, no HTTP login or wallet.
 - [Spike 015](.planning/spikes/015-retained-binding-checkpoint/README.md) — retained local TEST checkpoint rejects stale binding backups/clones; joint-write rollback and current restore checks pass. Not encrypted custody, full-host anti-rollback or enabled browser login.
+- [Spike 016](.planning/spikes/016-browser-personal-test/README.md) — opt-in browser personal TEST enrollment with server-issued session/CSRF, limits and closed-session refusal. Genuine SDK HTTP enrollment/negatives pass; not identity login, corporate powers or manual enrollment UAT.
 - [Spike 011](.planning/spikes/011-ncalayer-roundtrip/README.md) — historical browser/API stand and corrected CRL-pair gate; later TEST OCSP acceptance is recorded in Spike 012.
 - [Offline deal workflow](workflow/README.md) — test-key transfer fixture, persistent decision policy, frozen terms and a local signed-byte bridge with an internal demo record; not a browser API, NCA integration or real payment.
 - [Spike 009](.planning/spikes/009-immutable-terms-evidence/README.md) — local snapshot, same-file freshness and honestly labelled metadata/receipt record; offline only.

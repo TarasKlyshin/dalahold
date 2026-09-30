@@ -8,6 +8,8 @@ import test from 'node:test';
 import { prepareSdk, javaProcess } from './sdk.mjs';
 import { OwnerStore } from '../authority/owner-store.mjs';
 import { initializePersonalBindings, PersonalBindings } from './personal-bindings.mjs';
+import { createProbeServer } from './server.mjs';
+import { DatabaseSync } from 'node:sqlite';
 
 test('opaque subject identity: genuine TEST CMS, dedicated personal binding and offline storage compatibility',
   { skip: !process.env.NCA_SDK_ROOT, timeout: 60_000 }, async (t) => {
@@ -149,6 +151,52 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
         { receipt: enrollmentReceipt, historical: true });
     } finally { personalReopened.close(); }
 
+    // Genuine SDK CMS through the opt-in HTTP enrollment boundary. No manual
+    // browser/NCALayer UAT and no authenticated identity/business session.
+    const browserDirectory = join(build, 'browser-personal-registry');
+    const browserAnchor = join(build, 'browser-retained-checkpoint');
+    initializePersonalBindings(browserDirectory, { anchorDirectory: browserAnchor });
+    const browserServer = createProbeServer({ dbPath: join(build, 'browser-probe.sqlite'), sdk,
+      personalTest: { directory: browserDirectory, anchorDirectory: browserAnchor } });
+    await new Promise(resolve => browserServer.listen(0, '127.0.0.1', resolve));
+    try {
+      const origin = `http://127.0.0.1:${browserServer.address().port}`;
+      const page = await fetch(origin + '/personal/'); assert.equal(page.status, 200);
+      const cookie = page.headers.get('set-cookie').split(';')[0];
+      const ready = await fetch(origin + '/api/personal-test/status', { headers: { Cookie: cookie } });
+      assert.equal(ready.status, 200); const status = await ready.json();
+      assert.equal(status.scope, 'test_personal_binding_only');
+      const post = (path, body) => fetch(origin + path, { method: 'POST', headers: {
+        Cookie: cookie, Origin: origin, 'Content-Type': 'application/json', 'X-DalaHold-CSRF': status.csrfToken
+      }, body: JSON.stringify(body) });
+      const issued = await post('/api/personal-test/intents', { action: 'enroll_test_person' });
+      assert.equal(issued.status, 201); const intent = (await issued.json()).intent;
+      const exact = Buffer.from(intent.bytesBase64, 'base64');
+      for (const mode of ['legal-signer', 'revoked', 'wrong-purpose', 'altered']) {
+        const cms = await sign(mode === 'altered' ? Buffer.concat([exact, Buffer.from('changed')]) : exact,
+          mode === 'altered' ? 'sign' : mode);
+        assert.equal((await post('/api/personal-test/receipts', { intentId: intent.id, cms: cms.toString('base64') })).status, 422);
+      }
+      const db = new DatabaseSync(join(browserDirectory, 'personal.sqlite'), { readOnly: true });
+      try {
+        assert.equal(db.prepare('SELECT count(*) n FROM personal_bindings').get().n, 0);
+        assert.equal(db.prepare('SELECT receipt_json FROM binding_intents WHERE id=?').get(intent.id).receipt_json, null);
+      } finally { db.close(); }
+      const cms = (await sign(exact, 'sign')).toString('base64');
+      const accepted = await post('/api/personal-test/receipts', { intentId: intent.id, cms });
+      assert.equal(accepted.status, 200); const result = await accepted.json();
+      assert.equal(result.historical, false); assert.equal(result.receipt.scope, 'test_personal_binding_only');
+      assert.equal(result.receipt.certificateDigest, individual.certificateDigest);
+      assert.ok(['personId','organizationId','ownerId','mappingKeyId','powers','walletAddress','grant']
+        .every(field => !Object.hasOwn(result.receipt, field)));
+      const repeated = await post('/api/personal-test/receipts', { intentId: intent.id, cms });
+      assert.deepEqual(await repeated.json(), { ...result, historical: true });
+      assert.equal((await post('/api/personal-test/session/close', {})).status, 200);
+      assert.equal((await post('/api/personal-test/receipts', { intentId: intent.id, cms })).status, 401);
+    } finally {
+      await new Promise(resolve => browserServer.close(resolve)); await browserServer.resourcesClosed;
+    }
+
     // Trusted storage fixture only: no corporate powers policy, HTTP enrolment,
     // real Solana address/key, grant signature or business operation.
     const path = join(build, 'offline-owner.sqlite');
@@ -173,5 +221,5 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
     try { assert.deepEqual(reopened.owner(owner.ownerId), { ...owner,
       certificateId: director.certificateDigest, authEpoch: 1 }); }
     finally { reopened.close(); }
-    t.diagnostic('Genuine TEST personal enrollment, historical retry, stable mapping after private backup/restart and corporate/revoked/wrong-purpose/tampered refusals pass. Positive personal renewal is synthetic only: no eligible second bundled personal certificate. No HTTP account, corporate powers or wallet.');
+    t.diagnostic('Genuine TEST personal enrollment/library/current-backup/restart and opt-in HTTP enrollment/retry/close pass; corporate/revoked/wrong-purpose/tampered CMS refuse through HTTP. Positive personal renewal remains synthetic only: no eligible second bundled personal certificate. No manual enrollment UAT, identity login, corporate powers or wallet.');
   });

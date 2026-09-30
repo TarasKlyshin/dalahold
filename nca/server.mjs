@@ -1,4 +1,5 @@
-// Loopback test-signature probe. No identity, grants, deal writes or signer calls.
+// Loopback signature probe + explicit isolated personal TEST enrollment opt-in.
+// Neither scope grants identity access, deal writes, corporate powers or a signer.
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -7,12 +8,17 @@ import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { prepareSdk } from './sdk.mjs';
+import { PersonalBindings } from './personal-bindings.mjs';
+import { createPersonalTestHandler } from './personal-http.mjs';
 
 const directory = fileURLToPath(new URL('./', import.meta.url));
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const assets = new Map([['/', ['index.html', 'text/html; charset=utf-8']],
   ['/client.mjs', ['client.mjs', 'text/javascript; charset=utf-8']],
-  ['/styles.css', ['styles.css', 'text/css; charset=utf-8']]]);
+  ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
+  ['/personal/', ['personal.html', 'text/html; charset=utf-8']],
+  ['/personal-client.mjs', ['personal-client.mjs', 'text/javascript; charset=utf-8']],
+  ['/personal.css', ['personal.css', 'text/css; charset=utf-8']]]);
 const cookieName = 'dalahold_nca_test';
 
 function send(res, status, value) {
@@ -20,17 +26,21 @@ function send(res, status, value) {
   res.end(JSON.stringify(value));
 }
 
-async function body(req) {
+async function body(req, timeoutMs = 15_000) {
   if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(req.headers['content-type'] || '')) {
     throw Object.assign(new Error('content_type'), { status: 415 });
   }
   let size = 0;
   const chunks = [];
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > 140_000) throw Object.assign(new Error('body_too_large'), { status: 413 });
-    chunks.push(chunk);
-  }
+  const timer = setTimeout(() => req.destroy(new Error('body_timeout')), timeoutMs);
+  timer.unref();
+  try {
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > 140_000) throw Object.assign(new Error('body_too_large'), { status: 413 });
+      chunks.push(chunk);
+    }
+  } finally { clearTimeout(timer); }
   try {
     const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
@@ -44,7 +54,9 @@ function session(req) {
   return /^[a-f0-9]{64}$/.test(value || '') ? value : null;
 }
 
-export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000 }) {
+export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000, personalTest = null,
+  bodyTimeoutMs = 15_000 }) {
+  if (!Number.isInteger(bodyTimeoutMs) || bodyTimeoutMs < 10 || bodyTimeoutMs > 15_000) throw new Error('invalid_body_timeout');
   const statusSource = sdk.statusSource || 'test_crl_fixture';
   if (!['test_crl_fixture', 'test_ocsp'].includes(statusSource)) throw new Error('unsupported_test_status_source');
   mkdirSync(dirname(dbPath), { recursive: true });
@@ -60,6 +72,15 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
   const commit = db.prepare('UPDATE nca_test_challenges SET signature_hash = ?, receipt_json = ? WHERE id = ? AND receipt_json IS NULL');
   const events = [];
   let inflight = 0;
+  let bindings, personal;
+  if (personalTest) {
+    if (statusSource !== 'test_ocsp') { db.close(); throw new Error('personal_test_requires_ocsp'); }
+    try {
+      bindings = new PersonalBindings({ ...personalTest, now, sdk: { statusSource,
+        verifyIdentity: (...args) => runSdk(() => sdk.verifyIdentity(...args)) } });
+      personal = createPersonalTestHandler({ bindings, inspect, readBody: req => body(req, bodyTimeoutMs), now });
+    } catch (error) { db.close(); throw error; }
+  }
 
   function event(owner, code, started = now()) {
     events.push({ owner, code, at: new Date(now()).toISOString(), durationMs: Math.max(0, now() - started) });
@@ -162,6 +183,7 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
     const started = now();
     try {
       if (req.method === 'GET' && assets.has(pathname)) {
+        if (pathname === '/personal/' && personal && !personal.openSession(req, res)) return;
         if (pathname === '/' && !token) res.setHeader('Set-Cookie',
           `${cookieName}=${randomBytes(32).toString('hex')}; HttpOnly; SameSite=Strict; Path=/`);
         const [name, type] = assets.get(pathname);
@@ -169,6 +191,10 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
         return res.end(await readFile(resolve(directory, name)));
       }
       if (pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
+      if (pathname.startsWith('/api/personal-test/')) {
+        if (!personal) return send(res, 503, { error: 'personal_test_unavailable' });
+        return await personal.handle(req, res, pathname);
+      }
       if (!owner) return send(res, 403, { error: 'test_session_required' });
       if (pathname === '/api/status' && req.method === 'GET') {
         return send(res, 200, await inspect());
@@ -178,7 +204,7 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
           .filter((item) => item.owner === owner).map(({ owner: _, ...item }) => item) });
       }
       if (pathname === '/api/challenges' && req.method === 'POST') {
-        const input = await body(req);
+        const input = await body(req, bodyTimeoutMs);
         if (Object.keys(input).length) return send(res, 400, { error: 'server_fields_only' });
         await inspect();
         // Bound local storage; historical receipts remain for restart-safe retries.
@@ -202,20 +228,29 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
           bytesBase64: bytes.toString('base64'), hash: bytesHash, expiresAt } });
       }
       if (pathname === '/api/verify' && req.method === 'POST') {
-        const result = await verify(owner, await body(req));
+        const result = await verify(owner, await body(req, bodyTimeoutMs));
         event(owner, result.error || (result.replay ? 'historical_receipt' : 'test_signature_verified'), started);
         const { status, ...value } = result;
         return send(res, status, value);
       }
       send(res, 404, { error: 'not_found' });
     } catch (error) {
+      if (res.destroyed) return;
       event(owner, 'request_failed', started);
       const known = ['verifier_busy', 'status_unavailable', 'content_type', 'body_too_large', 'invalid_body'];
       send(res, error.status || 503, { error: known.includes(error.message) ? error.message : 'verifier_unavailable',
         ...(error.reason === 'crl_pair' ? { reason: 'crl_pair' } : {}) });
     }
   });
-  server.on('close', () => db.close());
+  server.headersTimeout = 15_000;
+  server.requestTimeout = 15_000;
+  let resolveResources;
+  server.resourcesClosed = new Promise(resolve => { resolveResources = resolve; });
+  server.on('close', () => {
+    const finish = () => { bindings?.close(); db.close(); resolveResources(); };
+    if (personal) personal.close().then(finish);
+    else finish();
+  });
   return server;
 }
 
@@ -223,9 +258,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     const sdk = await prepareSdk({ sdkRoot: process.env.NCA_SDK_ROOT, javaBin: process.env.NCA_JAVA_BIN,
       crlDirectory: process.env.NCA_TEST_CRL_DIR, statusSource: process.env.NCA_TEST_STATUS_SOURCE });
-    const server = createProbeServer({ dbPath: resolve(directory, '../.local/nca-test.sqlite'), sdk });
+    const personalDirectory = process.env.NCA_PERSONAL_TEST_DIRECTORY;
+    const personalAnchor = process.env.NCA_PERSONAL_TEST_ANCHOR;
+    if (Boolean(personalDirectory) !== Boolean(personalAnchor)) throw new Error('both personal TEST paths required');
+    const server = createProbeServer({ dbPath: resolve(directory, '../.local/nca-test.sqlite'), sdk,
+      personalTest: personalDirectory ? { directory: personalDirectory, anchorDirectory: personalAnchor } : null });
     server.listen(4175, '127.0.0.1', () => process.stdout.write('DalaHold test signature: http://127.0.0.1:4175/\n'));
-    const stop = () => server.close(async () => { await sdk.close(); process.exit(0); });
+    const stop = () => server.close(async () => { await server.resourcesClosed; await sdk.close(); process.exit(0); });
     process.once('SIGTERM', stop);
     process.once('SIGINT', stop);
   } catch { process.stderr.write('NCA test server unavailable: check SDK root and Java 17.\n'); process.exitCode = 1; }

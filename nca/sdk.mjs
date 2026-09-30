@@ -42,8 +42,9 @@ export async function prepareSdk({ sdkRoot, javaBin = '/opt/homebrew/opt/openjdk
     statusSource: statusSource === 'ocsp' ? 'test_ocsp' : 'test_crl_fixture',
     inspect: () => call('inspect'),
     verify: (bytes, cms) => call('verify', `${bytes.toString('base64')}\n${cms.toString('base64')}\n`),
-    // Internal opt-in evidence only. The HTTP stand never calls this or binds
-    // probe receipts to owners. Mapping key is stdin-only, never argv/env/logs.
+    // Explicit personal TEST enrollment may request this evidence. The separate
+    // signature probe never maps identities or binds its receipts to owners.
+    // Mapping key is stdin-only, never argv/env/logs.
     verifyIdentity: (bytes, cms, identityKey) => {
       if (!Buffer.isBuffer(identityKey) || identityKey.length !== 32) {
         throw new Error('32-byte identity mapping key required');

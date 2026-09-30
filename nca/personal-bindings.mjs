@@ -239,6 +239,9 @@ export class PersonalBindings {
 
   close() { if (this.#inflight) fail('verification_in_progress'); this.#db.close(); }
 
+  // Availability check only; no subject, binding or authorization is returned.
+  assertAvailable() { this.#read(() => {}); }
+
   #checkpoint() {
     privateDirectory(this.#anchorDirectory);
     const parent = lstatSync(dirname(this.#anchorDirectory));
@@ -288,7 +291,8 @@ export class PersonalBindings {
     });
   }
 
-  createIntent(sessionHash, request) {
+  createIntent(sessionHash, request, { assertCurrent = () => {} } = {}) {
+    if (typeof assertCurrent !== 'function') fail('invalid_binding_guard');
     if (!HASH.test(sessionHash || '') || !request || typeof request !== 'object' || Array.isArray(request)) fail('invalid_binding_request');
     const enroll = request.action === 'enroll_test_person';
     if (enroll ? Object.keys(request).sort().join(',') !== 'action' :
@@ -298,7 +302,9 @@ export class PersonalBindings {
     if (this.#transaction) fail('binding_transaction_in_progress');
     this.#db.exec('BEGIN IMMEDIATE'); this.#transaction = true;
     try {
+      assertCurrent();
       const key = this.#key(); key.fill(0); const expectedAnchor = this.#checkpoint();
+      if (this.#db.prepare('SELECT count(*) AS n FROM binding_intents').get().n >= 1000) fail('binding_storage_limit');
       const binding = enroll ? null : this.binding(request.bindingId);
       if (!enroll && !binding) fail('binding_not_found');
       if (binding && binding.certificateDigest === request.newCertificateDigest) fail('same_certificate');
@@ -313,7 +319,7 @@ export class PersonalBindings {
       const bytes = Buffer.from(JSON.stringify(intent, null, 2) + '\n');
       this.#db.prepare('INSERT INTO binding_intents (id, session_hash, bytes, bytes_hash, expires_at) VALUES (?,?,?,?,?)')
         .run(intent.nonce, sessionHash, bytes, hash(bytes), intent.expiresAt);
-      this.#advance(expectedAnchor); this.#db.exec('COMMIT');
+      this.#advance(expectedAnchor); assertCurrent(); this.#db.exec('COMMIT');
       return { id: intent.nonce, bytes, hash: hash(bytes), expiresAt: intent.expiresAt };
     } catch (error) { this.#db.exec('ROLLBACK'); throw error; }
     finally { this.#transaction = false; }
@@ -341,7 +347,9 @@ export class PersonalBindings {
     return { receipt, historical: true };
   }
 
-  async submit(sessionHash, request) {
+  async submit(sessionHash, request, { assertCurrent = () => {} } = {}) {
+    if (typeof assertCurrent !== 'function') fail('invalid_binding_guard');
+    assertCurrent();
     if (!HASH.test(sessionHash || '') || !request || Object.keys(request).sort().join(',') !== 'cms,intentId' ||
         !UUID.test(request.intentId || '') || !Buffer.isBuffer(request.cms) ||
         !request.cms.length || request.cms.length > 98_304) fail('invalid_binding_submission');
@@ -353,6 +361,7 @@ export class PersonalBindings {
         const row = this.#row(sessionHash, request.intentId);
         return { row, history: row?.receipt_json ? this.#history(row, signatureHash, key) : null };
       });
+      assertCurrent();
       const row = initial.row;
       if (!row) fail('binding_intent_not_found');
       if (initial.history) return initial.history;
@@ -366,6 +375,7 @@ export class PersonalBindings {
       let outcome;
       try { outcome = await this.#sdk.verifyIdentity(Buffer.from(bytes), Buffer.from(cms), key); }
       finally { this.#inflight--; }
+      assertCurrent(); // a closed/expired HTTP session cannot commit after SDK await
       // Snapshot server-verifier evidence once, before the synchronous transaction.
       const identity = outcome?.identity;
       const verified = outcome?.verified, source = outcome?.statusSource, validUntil = outcome?.validUntil;
@@ -429,6 +439,7 @@ export class PersonalBindings {
           if (current.expires_at <= afterCheckpoint) fail('binding_intent_expired');
           if (result.receipt.validUntil <= afterCheckpoint) fail('binding_status_expired');
         }
+        assertCurrent(); // also after O(n) checkpoint hashing, while rollback is possible
         this.#db.exec('COMMIT'); return result;
       } catch (error) { this.#db.exec('ROLLBACK'); throw error; }
       finally { this.#transaction = false; }

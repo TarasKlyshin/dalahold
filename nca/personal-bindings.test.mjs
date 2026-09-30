@@ -636,3 +636,31 @@ function initializeOrphan(anchor) {
   mkdirSync(anchor, { mode: 0o700 });
   writeFileSync(join(anchor, 'checkpoint.sqlite'), Buffer.alloc(0), { flag: 'wx', mode: 0o600 });
 }
+
+test('trusted HTTP session guard is rechecked after checkpoint hashing and rolls back BOTH stores', async t => {
+  const f = fixture(t), before = f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get());
+  let calls = 0;
+  assert.throws(() => f.store.createIntent(SESSION, { action: 'enroll_test_person' }, {
+    assertCurrent() { if (++calls === 2) throw new Error('personal_session_unavailable'); }
+  }), /personal_session_unavailable/);
+  assert.deepEqual(f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get()), before);
+  assert.equal(f.sql(db => db.prepare('SELECT count(*) n FROM binding_intents').get().n), 0);
+  const issued = enroll(f.store), issuedCheckpoint = f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get());
+  calls = 0;
+  await assert.rejects(f.store.submit(SESSION, { intentId: issued.id, cms: sign(issued.bytes) }, {
+    assertCurrent() { if (++calls === 4) throw new Error('personal_session_unavailable'); }
+  }), /personal_session_unavailable/);
+  assert.deepEqual(f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get()), issuedCheckpoint);
+  unchanged(f);
+  await submit(f.store, issued); unchanged(f, 1, 1);
+});
+
+test('persistent TEST intent ceiling refuses without changing the retained checkpoint', t => {
+  const f = fixture(t);
+  for (let i = 0; i < 1000; i++) enroll(f.store);
+  const before = f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get());
+  assert.throws(() => enroll(f.store), /binding_storage_limit/);
+  assert.equal(f.sql(db => db.prepare('SELECT count(*) n FROM binding_intents').get().n), 1000);
+  assert.deepEqual(f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get()), before);
+  unchanged(f);
+});

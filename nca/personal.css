@@ -1,0 +1,15 @@
+.personal-skip { position: absolute; top: 8px; left: 12px; padding: 10px 16px; background: #fffef9; color: var(--ink); transform: translateY(-150%); z-index: 1; }
+.personal-skip:focus { transform: translateY(0); }
+.personal-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); text-underline-offset: 3px; }
+header .brand { display: inline-flex; align-items: center; min-height: 44px; }
+#personal-workspace { min-width: 0; }
+#personal-result { padding-top: 14px; font-weight: 500; }
+#personal-result.error { color: #8c3328; }
+#personal-receipt { background: #e8eee3; padding: 15px 18px; }
+#personal-workspace summary { display: list-item; min-height: 44px; padding: 10px 0; cursor: pointer; }
+#personal-workspace pre { max-width: 100%; }
+#personal-workspace .digest { display: block; }
+@media (max-width: 600px) {
+  #personal-workspace .actions { flex-direction: column; align-items: stretch; }
+  #personal-workspace button { width: 100%; }
+}

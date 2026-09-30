@@ -58,7 +58,7 @@ the response contains one. `TestCmsSigner` labels this diagnostic
 OCSP fallback is enabled. The separate adapter above now validates these
 conditions; it does not call that utility for acceptance.
 
-Current verification: 126 Node cases + 7 offline Solana cases; 4 additional SDK
+Current verification: 159 Node cases + 7 offline Solana cases; 4 additional SDK
 runs (default CRL refusal, 47 signed synthetic/transport checks, live TEST OCSP
 CMS-to-HTTP acceptance including genuine bundled revoked/wrong-purpose
 certificate refusals, plus identity/parser/offline-storage compatibility).
@@ -225,7 +225,7 @@ failed unpublished copies remove only their temporary staging, permitting retry.
 Positive renewal between two eligible personal certificates is **synthetic
 only**; the bundle has no suitable second currently valid personal fixture.
 
-The HTTP stand does not import this library or enable login, wallet creation or
+At the Spike 014 checkpoint, the HTTP stand did not import this library or enable login, wallet creation or
 grants. A local private-file key is not an encrypted vault. An older backup is an
 older epoch/retirement snapshot, not global anti-rollback; public authorization
 must stay disabled until recovery, key custody and HTTP boundaries are reviewed.
@@ -317,6 +317,73 @@ Current-pair open passes, and the old initial pair refuses as a current registry
 The old initial backup is preserved as a historical artifact, **not a current
 restore candidate**. This state is prepared, not runtime authentication; see
 Spike 015 for readback evidence and remaining limits.
+
+### Opt-in browser personal TEST enrollment, 30 September 2026
+
+[Spike 016](../.planning/spikes/016-browser-personal-test/README.md) connects a
+separate `/personal/` page to personal TEST enrollment evidence, **not identity
+login**. It accepts only `enroll_test_person`, not certificate replacement,
+corporate powers, a wallet or business operations. The existing `/` signature
+probe remains independent; its historical receipts cannot enroll a person.
+
+Explicit opt-in requires BOTH existing private paths and explicit TEST OCSP:
+
+```sh
+NCA_SDK_ROOT='/path/to/SDK 2.0' NCA_TEST_STATUS_SOURCE=ocsp \
+  NCA_PERSONAL_TEST_DIRECTORY='/path/to/existing-private-registry' \
+  NCA_PERSONAL_TEST_ANCHOR='/path/to/retained-private-checkpoint' \
+  node nca/server.mjs
+```
+
+Without this opt-in, the personal API refuses. No constructor/startup creates a
+key, checkpoint or binding. Stale/missing/insecure state refuses; readiness checks
+both SDK and current retained state. Never point at a historical pair to reset it.
+Stop the existing local process before starting another listener on port 4175.
+
+The page issues a separate server-generated anonymous TEST session: 15-minute
+fixed lifetime, `HttpOnly; SameSite=Strict`, no persistent identity grant. State is
+in memory, so restart invalidates all sessions and their old pending submissions.
+Loopback HTTP omits `Secure`; this is NOT production cookie/HTTPS configuration.
+Exact Host/Origin/Fetch-Metadata checks and a session-bound synchronizer token in
+`X-DalaHold-CSRF` gate JSON writes, following [OWASP's CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html).
+Different local ports share browser cookie scope; hostile local services or
+same-OS-user attackers are outside this trusted TEST environment.
+
+Bounds: 200 concurrent session records; 20 new sessions/minute globally; per
+session status/intent/submit rates 10/3/8 per minute, global 40/12/24. Two SDK
+calls maximum are SHARED with the signature probe. Body/CMS limits remain strict;
+request bodies have a 15-second total bound, including unfinished trickle
+requests; server headers/request timeouts are configured to 15 seconds.
+An expired/closed session is rechecked before SDK inspection.
+The persistent registry stops at 1000 intents without purging history or
+resetting its checkpoint. Rate errors use 429/Retry-After. Session close is not
+blocked by these limits; it invalidates pending verification before commit. A
+trusted synchronous session guard is checked again after hashing while both
+databases can still roll back. Disconnected requests drain safely on shutdown.
+Graceful process shutdown is not the same as explicit HTTP session close: a
+still-connected body-complete SDK request may finish before the server's close
+event invalidates sessions. Do not treat SIGTERM initiation as a commit barrier.
+
+The browser verifies returned intent text/base64/hash/canonical fields, displays
+exact bytes and expiry, uses the existing NCALayer helpers, and distinguishes
+fresh vs historical receipts. CMS/CSRF stay in memory only; no raw subject IDs,
+private key, password or verifier extras are returned/exported. Closing clears
+UI state and ignores late responses; failed close explicitly reports that server
+closure is NOT confirmed and provides retry. SDK/chain readiness alone does not
+prove a particular certificate's current status.
+
+Thirteen HTTP/session cases, two additional storage guard/ceiling cases and eighteen
+frontend cases pass. Genuine bundled personal CMS enrollment, refusal of corporate/
+revoked/wrong-purpose/altered CMS, historical repeat and session close pass through
+HTTP in isolated state. A stored identical retry skips SDK verification; concurrent
+pending duplicates may each verify, but only one commits and no new receipt is
+minted by the historical result. This is not manual NCALayer enrollment UAT.
+The opt-in listener is running locally. Browser navigation reached the new page,
+but further UI/keyboard/responsive checks were blocked when the browser service
+could not verify its mandatory access policy. They remain unaccepted; no bypass
+or alternative browser transport was used. Production auth, encrypted custody,
+full-host rollback, powers, renewal, deals and devnet
+remain closed; the manual TEST personal enrollment is the next user check.
 
 ## Start and check
 

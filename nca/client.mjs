@@ -64,7 +64,7 @@ export function ncalayerCall(request, { WebSocketClass = globalThis.WebSocket, t
   });
 }
 
-if (typeof document !== 'undefined') {
+if (typeof document !== 'undefined' && document.getElementById('workspace')) {
   const $ = (id) => document.getElementById(id);
   const events = [];
   let ready = null;

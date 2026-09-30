@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DalaHold · личная TEST-привязка</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/personal.css">
+  <script type="module" src="/personal-client.mjs"></script>
+</head>
+<body>
+  <a class="personal-skip" href="#personal-workspace">К содержимому</a>
+  <header><a class="brand" href="/">dalahold.</a><span>Локальный стенд · личная TEST-привязка</span></header>
+  <main id="personal-workspace" tabindex="-1" aria-busy="false">
+    <h1>Личная TEST-привязка</h1>
+    <p class="intro">Подпиши точное тестовое намерение через NCALayer. Сервер проверит сертификат физического лица и его TEST OCSP-статус, затем сохранит свидетельство тестовой привязки.</p>
+    <aside class="notice" role="note">Используй только контейнер <strong>для подписи</strong> из SDK: <strong>Keys and Certs → Gost2015 → 2026.05.08-2027.05.07 → Физическое лицо</strong> (<code>.p12</code>). Пароль вводится только в окне NCALayer. Квитанция подтверждает тестовую привязку; вход в аккаунт, корпоративные полномочия, кошелёк и платёж остаются недоступны.</aside>
+    <section aria-labelledby="personal-session-title">
+      <h2 id="personal-session-title">TEST-сессия и готовность</h2>
+      <p id="personal-sdk">Проверяем готовность локального сервера…</p>
+      <p id="personal-session-expiry">Проверяем срок TEST-сессии…</p>
+      <p id="personal-connection">NCALayer: соединение ещё не проверено</p>
+      <div class="actions">
+        <button id="personal-connect" type="button">Проверить NCALayer</button>
+        <button id="personal-refresh" type="button">Обновить готовность</button>
+        <button id="personal-close" type="button" disabled>Закрыть TEST-сессию</button>
+      </div>
+      <p class="small">Закрытие очищает данные этой страницы и завершает серверную TEST-сессию. Его можно запросить и во время ожидания подписи.</p>
+      <a id="personal-new-session" class="personal-link" href="/personal/" hidden>Начать новую TEST-сессию</a>
+    </section>
+    <section aria-labelledby="personal-intent-title">
+      <h2 id="personal-intent-title">1. Проверить намерение</h2>
+      <button id="personal-create" type="button" disabled>Создать тестовое намерение</button>
+      <div id="personal-intent" hidden>
+        <h3 id="personal-exact-title" tabindex="-1">Точные подписываемые данные</h3>
+        <p id="personal-intent-expiry"></p>
+        <pre id="personal-exact-bytes" tabindex="0" aria-label="Точный текст намерения в UTF-8"></pre>
+        <p class="small">SHA-256 точных байтов</p><code class="digest" id="personal-hash"></code>
+        <details>
+          <summary>Точные байты в base64</summary>
+          <pre id="personal-base64" tabindex="0" aria-label="Точные подписываемые байты в base64"></pre>
+        </details>
+        <p class="small">NCALayer получает эти байты без редактирования. Намерение действует пять минут; закрытие или истечение TEST-сессии прекращает работу с ним.</p>
+      </div>
+    </section>
+    <section aria-labelledby="personal-sign-title">
+      <h2 id="personal-sign-title">2. Подписать и получить квитанцию</h2>
+      <p>В NCALayer выбери указанный TEST-контейнер физического лица. Полученная CMS-подпись автоматически отправится на локальный сервер. Если диалог закрыт, подпись не отправляется.</p>
+      <div class="actions">
+        <button id="personal-sign" class="primary" type="button" disabled>Подписать и проверить</button>
+        <button id="personal-retry" type="button" disabled>Повторить отправку подписи</button>
+      </div>
+      <p id="personal-result" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Подготовка TEST-сессии…</p>
+      <div id="personal-receipt" hidden>
+        <h3 id="personal-receipt-kind" tabindex="-1">Тестовая квитанция</h3>
+        <p id="personal-receipt-note"></p>
+        <dl>
+          <dt>ID квитанции</dt><dd id="personal-receipt-id"></dd>
+          <dt>SHA-256 подписанного намерения</dt><dd id="personal-receipt-hash"></dd>
+          <dt>ID тестовой привязки</dt><dd id="personal-receipt-binding"></dd>
+          <dt>Версия привязки</dt><dd id="personal-receipt-epoch"></dd>
+          <dt>SHA-256 сертификата</dt><dd id="personal-receipt-certificate"></dd>
+          <dt>Время первоначальной проверки</dt><dd id="personal-receipt-verified"></dd>
+          <dt>Статус был подтверждён до</dt><dd id="personal-receipt-until"></dd>
+          <dt>Источник статуса</dt><dd id="personal-receipt-source"></dd>
+          <dt>Область квитанции</dt><dd id="personal-receipt-scope"></dd>
+        </dl>
+      </div>
+    </section>
+    <footer>
+      <p class="small">CMS-подпись и CSRF-токен находятся только в памяти страницы. Они не сохраняются в хранилище браузера, журнал или экспорт. ИИН и БИН здесь не отображаются.</p>
+      <a class="personal-link" href="/">К проверке тестовой ЭЦП</a>
+    </footer>
+  </main>
+</body>
+</html>
