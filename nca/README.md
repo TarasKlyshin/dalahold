@@ -58,7 +58,7 @@ the response contains one. `TestCmsSigner` labels this diagnostic
 OCSP fallback is enabled. The separate adapter above now validates these
 conditions; it does not call that utility for acceptance.
 
-Current verification: 159 Node cases + 7 offline Solana cases; 4 additional SDK
+Current verification: 161 Node cases + 7 offline Solana cases; 4 additional SDK
 runs (default CRL refusal, 47 signed synthetic/transport checks, live TEST OCSP
 CMS-to-HTTP acceptance including genuine bundled revoked/wrong-purpose
 certificate refusals, plus identity/parser/offline-storage compatibility).
@@ -386,6 +386,14 @@ full-host rollback, powers, renewal, deals and devnet
 remain closed; the manual TEST personal enrollment is the next user check.
 
 ## Start and check
+
+The 30 September loopback [WAL crash recovery](../.planning/spikes/016-browser-personal-test/RECOVERY.md)
+preserved all original probe rows and the manual receipt. The small probe store
+now pins DELETE rollback journaling, FULL synchronization and `mmap_size=0`,
+avoiding its observed mapped WAL-index crash path. SQLite converts old WAL state;
+never manually remove WAL/SHM, restore an older DB, or reset the personal checkpoint
+as a recovery shortcut. Underlying physical/OS failure cause remains unconfirmed.
+Browser UAT is still blocked by the browser service's mandatory access-policy gate.
 
 From the project root, use the SDK directory containing `Java/` and
 `Keys and Certs/`. The SDK and keys remain outside Git.

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { createProbeServer } from './server.mjs';
@@ -45,6 +45,58 @@ async function challenge(app) {
   assert.equal(response.status, 201);
   return (await response.json()).challenge;
 }
+
+test('loopback probe uses FULL rollback journaling without WAL shared-memory or mmap reads', async (t) => {
+  const dbPath = temporary(t);
+  const app = await startProbe(dbPath);
+  t.after(() => app.close());
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try { assert.equal(db.prepare('PRAGMA journal_mode').get().journal_mode, 'delete'); }
+  finally { db.close(); }
+  const created = await challenge(app);
+  const response = await app.post('/api/verify', { challengeId: created.id, cms: created.bytesBase64 });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).receipt.scope, 'test_signature_only');
+  assert.equal(existsSync(`${dbPath}-shm`), false);
+  assert.equal(existsSync(`${dbPath}-wal`), false);
+});
+
+test('existing WAL probe converts through SQLite without losing requests, receipts or historical retry', async (t) => {
+  const dbPath = temporary(t);
+  let app = await startProbe(dbPath);
+  const created = await challenge(app);
+  const input = { challengeId: created.id, cms: created.bytesBase64 };
+  const result = await (await app.post('/api/verify', input)).json();
+  const cookie = app.cookie;
+  await app.close();
+  // Prepare an isolated legacy WAL fixture; never delete a live WAL/SHM file.
+  const migrationPath = join(dirname(dbPath), 'pending-wal.sqlite');
+  const legacy = new DatabaseSync(dbPath);
+  let storedReceipt;
+  try {
+    assert.equal(legacy.prepare('PRAGMA journal_mode=WAL').get().journal_mode, 'wal');
+    // A committed but uncheckpointed change must survive, not just old DB pages.
+    storedReceipt = JSON.stringify(result.receipt, null, 2);
+    legacy.prepare('UPDATE nca_test_challenges SET receipt_json=? WHERE id=?').run(storedReceipt, created.id);
+    assert.ok(statSync(`${dbPath}-wal`).size > 0);
+    // This fixture writer is idle; preserve DB+WAL without relying on its close.
+    copyFileSync(dbPath, migrationPath);
+    copyFileSync(`${dbPath}-wal`, `${migrationPath}-wal`);
+  }
+  finally { legacy.close(); }
+  app = await startProbe(migrationPath, { sdk: { ...fakeSdk, verify() { throw new Error('history must not reverify'); } } });
+  t.after(() => app.close());
+  const restored = new DatabaseSync(migrationPath, { readOnly: true });
+  try {
+    assert.equal(restored.prepare('PRAGMA journal_mode').get().journal_mode, 'delete');
+    assert.equal(restored.prepare('PRAGMA quick_check').get().quick_check, 'ok');
+    assert.equal(restored.prepare('SELECT count(*) n FROM nca_test_challenges').get().n, 1);
+    assert.equal(restored.prepare('SELECT receipt_json FROM nca_test_challenges').get().receipt_json, storedReceipt);
+  } finally { restored.close(); }
+  const retry = await app.post('/api/verify', input, { Cookie: cookie });
+  assert.equal(retry.status, 200);
+  assert.deepEqual(await retry.json(), { receipt: result.receipt, replay: true });
+});
 
 test('exact session-bound challenge commits once, survives restart and returns a historical receipt', async (t) => {
   const dbPath = temporary(t);

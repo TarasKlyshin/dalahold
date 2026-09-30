@@ -61,12 +61,19 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
   if (!['test_crl_fixture', 'test_ocsp'].includes(statusSource)) throw new Error('unsupported_test_status_source');
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
-  db.exec(`PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS nca_test_challenges (
+  try {
+    // Small single-process TEST store: avoid the mapped WAL-index crash path.
+    // SQLite performs any old-WAL recovery/conversion; never unlink its files.
+    db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA mmap_size=0;');
+    if (db.prepare('PRAGMA journal_mode').get().journal_mode !== 'delete' ||
+        db.prepare('PRAGMA synchronous').get().synchronous !== 2 ||
+        db.prepare('PRAGMA mmap_size').get()?.mmap_size !== 0) throw new Error('unsafe_probe_storage');
+    db.exec(`CREATE TABLE IF NOT EXISTS nca_test_challenges (
       id TEXT PRIMARY KEY, session_hash TEXT NOT NULL, bytes BLOB NOT NULL,
       bytes_hash TEXT NOT NULL, expires_at INTEGER NOT NULL,
       signature_hash TEXT, receipt_json TEXT
     ) STRICT;`);
+  } catch (error) { db.close(); throw error; }
   const find = db.prepare('SELECT * FROM nca_test_challenges WHERE id = ? AND session_hash = ?');
   const insert = db.prepare('INSERT INTO nca_test_challenges (id, session_hash, bytes, bytes_hash, expires_at) VALUES (?, ?, ?, ?, ?)');
   const commit = db.prepare('UPDATE nca_test_challenges SET signature_hash = ?, receipt_json = ? WHERE id = ? AND receipt_json IS NULL');

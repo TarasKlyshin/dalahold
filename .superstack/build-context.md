@@ -94,7 +94,7 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 
 `mvp_complete: false`
 
-`tests_passing: true` (159 Node + 7 offline Solana cases, plus 4 SDK runs including 47 OCSP and 30 subject-parser checks, CRL refusal, live TEST OCSP HTTP/genuine negatives and personal-binding/checkpoint/backup/browser-HTTP checks, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed. Opt-in personal listener runs locally; browser navigation reached its page but mandatory browser-policy verification blocked subsequent UI/keyboard/responsive QA. Not manual personal-enrollment/identity-login/business-grant or devnet acceptance.)
+`tests_passing: true` (161 Node + 7 offline Solana cases, plus 4 SDK runs including 47 OCSP and 30 subject-parser checks, CRL refusal, live TEST OCSP HTTP/genuine negatives and personal-binding/checkpoint/backup/browser-HTTP checks, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed. Opt-in personal listener runs locally after WAL-crash recovery with preserved rows and two new rollback/WAL-frame regressions; browser-policy verification still blocks UI/keyboard/responsive QA. Not manual personal-enrollment/identity-login/business-grant or devnet acceptance.)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)
@@ -327,3 +327,19 @@ The dated handoffs below preserve earlier checkpoints, not current gate status.
   bypass or UI/keyboard/responsive/screenshot success claimed. Manual personal
   NCALayer enrollment is also open. Next: recover browser QA, then human TEST
   physical-person signing/retry/close and new backup at the advanced revision.
+
+## 2026-09-30 loopback WAL crash recovery
+
+- Baseline clean `9174914f3114ba284058696a9f8eb1269f78618c`. Prior listener PID
+  81836 crashed at 19:22:37 +0500 with SIGBUS in SQLite walIndexTryHdr; exit138,
+  matching macOS crash report. Underlying USB/OS/storage trigger unconfirmed.
+- Original DB/WAL/SHM captured privately before conversion, no manual unlink,
+  reset or stale restore. Probe pins DELETE/FULL/mmap_size=0 with startup checks;
+  personal retained registry unchanged. SQLite handles legacy WAL conversion.
+- Two failing-before/passing-after storage tests, including committed nonempty
+  WAL-frame preservation and history without SDK. 161 Node + 7 offline Solana
+  and all four SDK runs pass. Not a reproduced native/hardware fault acceptance.
+- Opt-in PID 89225 started 19:33:08, loopback4175. All two old rows/one receipt
+  preserved exactly; only unconsumed old request already expired. Personal state
+  still revision0/empty. Browser-policy check blocks UI UAT, no bypass. See
+  `.planning/spikes/016-browser-personal-test/RECOVERY.md` for evidence and handoff.

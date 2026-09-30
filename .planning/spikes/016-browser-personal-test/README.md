@@ -129,6 +129,11 @@ TEST binding library. This is enrollment evidence, **not login or a business gra
 
 ## Next manual acceptance
 
+The earlier PID 81836 later crashed in SQLite WAL shared memory. The loopback
+store has been recovered with preserved rows and rollback journaling; current
+counts are 161 Node + 7 offline Solana and four SDK runs. See the separate
+[recovery record](RECOVERY.md) for the crash evidence, current listener and limits.
+
 1. After browser access recovers, reload `/personal/`, confirm settled TEST
    readiness and connectivity, create an exact intention and inspect text/hash/
    expiry. Check desktop/mobile overflow, keyboard navigation/focus and console.
