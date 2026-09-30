@@ -58,7 +58,7 @@ the response contains one. `TestCmsSigner` labels this diagnostic
 OCSP fallback is enabled. The separate adapter above now validates these
 conditions; it does not call that utility for acceptance.
 
-Current verification: 112 Node cases + 7 offline Solana cases; 4 additional SDK
+Current verification: 126 Node cases + 7 offline Solana cases; 4 additional SDK
 runs (default CRL refusal, 47 signed synthetic/transport checks, live TEST OCSP
 CMS-to-HTTP acceptance including genuine bundled revoked/wrong-purpose
 certificate refusals, plus identity/parser/offline-storage compatibility).
@@ -231,22 +231,27 @@ older epoch/retirement snapshot, not global anti-rollback; public authorization
 must stay disabled until recovery, key custody and HTTP boundaries are reviewed.
 No new browser UAT or actual wallet is claimed.
 
-Operator provisioning is explicit, non-overwriting and separate from server start:
+The operator procedure below is the current Spike 015 procedure, not the original
+Spike 014 initialization API. Provisioning is explicit, non-overwriting and
+separate from server start:
 
 ```sh
-# From the repo root; creates an empty private TEST registry, never an account.
-node --input-type=module -e 'import { initializePersonalBindings } from "./nca/personal-bindings.mjs"; initializePersonalBindings(".local/nca-personal-bindings");'
+# From the repo root; NEW paths only, private existing parent directories.
+# Both locations must be on the same filesystem/device, outside one another.
+# Creates an empty TEST registry/checkpoint, never an account.
+node --input-type=module -e 'import { initializePersonalBindings } from "./nca/personal-bindings.mjs"; initializePersonalBindings("/path/to/new-private-registry", {anchorDirectory:"/path/to/separate-control/new-checkpoint"});'
 node --test nca/personal-bindings.test.mjs
 ```
 
 Never rerun initialization as recovery or delete an existing key to regenerate it.
 Back up key/database together to a new private directory with `backupTo`; point a
-new internal store at that protected pair for TEST restore checks. A missing or
-changed key fails closed; do not overwrite existing state. Private registries and
+new internal store at that protected pair **and the original retained checkpoint**
+for TEST restore checks. A missing/changed key or stale pair fails closed; do not
+overwrite existing state. Private registries and
 backups remain ignored by Git and are not used by `nca/server.mjs`.
 On 30 September an empty local registry was explicitly provisioned at
 `.local/nca-personal-bindings` with its protected current backup at
-`.local/nca-personal-bindings-initial-backup`; both are **prepared, not active**.
+`.local/nca-personal-bindings-initial-backup`; both were **prepared, not active**.
 Do not rerun the provisioning example against either existing path. No personal
 binding or intent exists in this local registry yet; genuine SDK acceptance above
 used isolated temporary test state.
@@ -255,6 +260,63 @@ local result; `parent_sync_unconfirmed` means the complete target exists but its
 final directory-sync durability is not established. Do not overwrite it or treat
 it as an unpublished failure. Publication assumes a trusted, cooperative parent;
 adversarial same-user empty-directory races and power-loss acceptance are not proven.
+
+### Retained local TEST checkpoint and recovery, 30 September 2026
+
+[Spike 015](../.planning/spikes/015-retained-binding-checkpoint/README.md) requires
+an operator-retained `checkpoint.sqlite` outside ordinary key/database backups.
+It binds registry ID, mapping-key ID, revision and a canonical digest of the main
+schema/data. Every intent or new receipt advances both files in one attached
+SQLite transaction, with DELETE rollback journals and FULL synchronization.
+Every current-state read and historical retry also validates the checkpoint;
+historical receipts are still not current authorization. Thirty-seven focused
+cases pass, including stale copies/clones, same-inode restore, concurrent copies,
+missing/replaced checkpoints, tampering, expiry and joint-write rollback/retry.
+
+This is **administrative separation in a local TEST environment**, not an
+encrypted key vault or independent production monotonic authority. The checkpoint
+file/schema and its owner are trusted. Rolling back both files/the whole volume,
+malicious same-OS-user or privileged changes, power failure and disk loss are not
+covered. Same-device placement is required; actual storage/VFS durability must
+be reviewed before production. Full-state hashing is O(n), suitable only for this
+small internal registry. Browser login, business grants and wallets remain off.
+
+Operator rules:
+
+1. Stop all users/writers of this internal registry, including old Spike 014
+   code, before an upgrade or restore. Do not stop the independent signature-only
+   HTTP stand for this library upgrade; it does not load the registry.
+2. Protect the mapping key and every backup as credentials: owner-only directories
+   `0700`, files `0600`, trusted owner-controlled parents without group/other write
+   permission. Never put keys, CMS, private subjects or checkpoint data in Git/logs.
+   Plaintext owner-only files are only the current local TEST custody boundary.
+3. Upgrade an **empty** legacy registry explicitly with
+   `enablePersonalBindingAnchor({directory,anchorDirectory})`. The existing key
+   is retained. A nonempty legacy registry is refused; it requires a separately
+   reviewed reconciliation, not reset, clearing tables or trusting a snapshot.
+   Constructors and server startup never bootstrap checkpoints.
+4. If initial bootstrap was interrupted before the joint commit, keep all files.
+   Only after confirming an empty legacy main and a private no-schema checkpoint
+   may the operator explicitly use `resumeEmptyBootstrap:true`. Initialized or
+   nonempty checkpoints cannot be reset this way. A missing checkpoint on an
+   initialized registry is a recovery incident, not a reason to initialize again.
+5. Create a new backup with `backupTo`, check publication/durability, and retain
+   the checkpoint separately. Restore/open the latest pair against that SAME
+   retained checkpoint. If it refuses, retain the evidence and find/reconcile the
+   latest state; never restore an older checkpoint to make an old pair pass.
+6. Multiple copies may open for checks, but only one can remain the writer: any
+   state change in one makes the other copies stale. Taking a backup does not
+   authorize that backup as a new concurrent writer. Never infer physical-fault
+   durability or successful recovery merely from a copied file.
+
+The empty `.local/nca-personal-bindings` is now explicitly upgraded, preserving
+its original key at revision 0. The retained checkpoint is
+`/Volumes/dev/dev/.dalahold-test-control/personal-bindings-anchor/checkpoint.sqlite`;
+the new current pair is `.local/nca-personal-bindings-retained-checkpoint-backup`.
+Current-pair open passes, and the old initial pair refuses as a current registry.
+The old initial backup is preserved as a historical artifact, **not a current
+restore candidate**. This state is prepared, not runtime authentication; see
+Spike 015 for readback evidence and remaining limits.
 
 ## Start and check
 

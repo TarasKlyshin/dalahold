@@ -92,8 +92,9 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
     // Real bundled personal TEST CMS over a dedicated enrollment intent. This
     // internal binding has no HTTP session/account, corporate powers or wallet.
     const personalDirectory = join(build, 'personal-bindings');
-    initializePersonalBindings(personalDirectory);
-    const personal = new PersonalBindings({ directory: personalDirectory, sdk });
+    const personalAnchor = join(build, 'retained-personal-checkpoint');
+    initializePersonalBindings(personalDirectory, { anchorDirectory: personalAnchor });
+    const personal = new PersonalBindings({ directory: personalDirectory, anchorDirectory: personalAnchor, sdk });
     const sessionHash = '7'.repeat(64);
     let enrollment, enrollmentCms, enrollmentReceipt, personalBinding;
     try {
@@ -130,7 +131,7 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
         cms: await sign(Buffer.concat([tamperedEnrollment.bytes, Buffer.from('changed')]), 'sign') }), /binding_identity_rejected/);
       const backupDirectory = join(build, 'personal-backup');
       assert.deepEqual(await personal.backupTo(backupDirectory), { published: true, durability: 'synced' });
-      const restored = new PersonalBindings({ directory: backupDirectory, sdk });
+      const restored = new PersonalBindings({ directory: backupDirectory, anchorDirectory: personalAnchor, sdk });
       try {
         assert.deepEqual(restored.binding(personalBinding.bindingId), personalBinding);
         const again = restored.createIntent(sessionHash, { action: 'enroll_test_person' });
@@ -140,7 +141,8 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
         assert.deepEqual(restored.binding(personalBinding.bindingId), personalBinding);
       } finally { restored.close(); }
     } finally { personal.close(); }
-    const personalReopened = new PersonalBindings({ directory: personalDirectory, sdk });
+    assert.throws(() => new PersonalBindings({ directory: personalDirectory, anchorDirectory: personalAnchor, sdk }), /binding_state_stale/);
+    const personalReopened = new PersonalBindings({ directory: join(build, 'personal-backup'), anchorDirectory: personalAnchor, sdk });
     try {
       assert.deepEqual(personalReopened.binding(personalBinding.bindingId), personalBinding);
       assert.deepEqual(await personalReopened.submit(sessionHash, { intentId: enrollment.id, cms: enrollmentCms }),

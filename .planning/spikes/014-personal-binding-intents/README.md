@@ -9,6 +9,11 @@ tags: [identity, key, enrolment, rebind, sqlite, test-only]
 
 # Spike 014: protected TEST personal binding and signed intents
 
+Historical checkpoint: the current mandatory retained-checkpoint initialization
+and restore procedure is in [Spike 015](../015-retained-binding-checkpoint/README.md)
+and [nca/README.md](../../../nca/README.md). Original Spike 014 backups alone must
+not be treated as current authorization or bootstrapped into a new checkpoint.
+
 Baseline local `main`: `1c954bf247cafe5c63a4ef2da538ce57b24eb1cb`.
 Continue the approved key-protection and dedicated registration/replacement step.
 No HTTP login, corporate representation, wallet, grant, payment, push or devnet.

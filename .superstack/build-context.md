@@ -64,10 +64,14 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
   intents, atomic epoch/retirement/receipt and protected backup/restart. Genuine
   personal enrollment and corporate/revoked/wrong-purpose/tampered refusals pass;
   positive same-profile renewal is synthetic only. No HTTP account or grant uses
-  it, and restoring an older snapshot does not prove live anti-rollback.
-  Empty private registry/current backup are prepared under ignored `.local/`,
-  not loaded by the HTTP stand. Focused storage review led to atomic backup,
-  history MAC and expiry-race fixes; global anti-rollback remains an auth blocker.
+  it. A retained local TEST checkpoint now validates registry/key/revision/schema/
+  data and rejects older snapshots or stale live clones. Intent/receipt and
+  checkpoint advance together using attached DELETE-journal/FULL transactions.
+  Empty private registry/current backup are prepared, not loaded by HTTP; the
+  checkpoint is outside ordinary backups on the same filesystem. Focused storage
+  review led to history MAC, expiry, joint-write, concurrent backup and bootstrap
+  fixes. Whole-volume rollback, encrypted production custody, physical-fault
+  acceptance and public authorization remain open; no independent hardware claim.
 
 ## Build status
 
@@ -84,7 +88,7 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 
 `mvp_complete: false`
 
-`tests_passing: true` (112 Node + 7 offline Solana cases, plus 4 SDK runs including 47 OCSP and 30 subject-parser checks, CRL refusal, live TEST OCSP HTTP/genuine negatives and genuine personal-binding/backup checks, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed, not browser-owner/business-grant or devnet acceptance)
+`tests_passing: true` (126 Node + 7 offline Solana cases, plus 4 SDK runs including 47 OCSP and 30 subject-parser checks, CRL refusal, live TEST OCSP HTTP/genuine negatives and genuine personal-binding/checkpoint/backup checks, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed, not browser-owner/business-grant or devnet acceptance)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)

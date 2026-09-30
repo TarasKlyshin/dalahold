@@ -1,13 +1,13 @@
 // Policy/storage test doubles only. Genuine cryptography lives in identity.test.mjs.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, statSync, chmodSync, readdirSync,
-  unlinkSync, renameSync, symlinkSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, statSync, chmodSync, readdirSync, copyFileSync,
+  unlinkSync, renameSync, symlinkSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
-import { initializePersonalBindings, PersonalBindings } from './personal-bindings.mjs';
+import { initializePersonalBindings, enablePersonalBindingAnchor, PersonalBindings } from './personal-bindings.mjs';
 
 const SESSION = '9'.repeat(64), OTHER_SESSION = '8'.repeat(64);
 const C1 = '1'.repeat(64), C2 = '2'.repeat(64), C3 = '3'.repeat(64);
@@ -20,7 +20,8 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'dalahold-binding-policy-'));
   const directory = join(root, 'registry');
-  initializePersonalBindings(directory);
+  const anchor = join(root, 'retained-checkpoint');
+  initializePersonalBindings(directory, { anchorDirectory: anchor });
   let time = 1_000_000, calls = 0;
   const sdk = { statusSource: 'test_ocsp', async verifyIdentity(bytes, cms) {
     calls++;
@@ -32,7 +33,7 @@ function fixture(t) {
   } };
   const stores = new Set();
   const open = (path = directory, verifier = sdk, now = () => time) => {
-    const store = new PersonalBindings({ directory: path, sdk: verifier, now });
+    const store = new PersonalBindings({ directory: path, anchorDirectory: anchor, sdk: verifier, now });
     const close = store.close.bind(store);
     store.close = () => { close(); stores.delete(store); };
     stores.add(store); return store;
@@ -46,7 +47,11 @@ function fixture(t) {
     .map(table => [table, db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n])
     .concat([['receipts', db.prepare('SELECT count(*) AS n FROM binding_intents WHERE receipt_json IS NOT NULL').get().n]])));
   t.after(() => { for (const current of stores) current.close(); rmSync(root, { recursive: true }); });
-  return { root, directory, store, sdk, open, sql, counts, get calls() { return calls; },
+  const anchorSql = callback => {
+    const db = new DatabaseSync(join(anchor, 'checkpoint.sqlite'));
+    try { return callback(db); } finally { db.close(); }
+  };
+  return { root, directory, anchor, store, sdk, open, sql, anchorSql, counts, get calls() { return calls; },
     get time() { return time; }, set time(value) { time = value; } };
 }
 const enroll = store => store.createIntent(SESSION, { action: 'enroll_test_person' });
@@ -146,6 +151,7 @@ test('replacement retains binding, increments epoch, retires old credential and 
   const retired = enroll(restored);
   await assert.rejects(submit(restored, retired, sign(retired.bytes, C1)), /retired_certificate/);
   await assert.rejects(f.store.backupTo(target), /binding_state_exists/);
+  assert.throws(() => f.store.binding(id), /binding_state_stale/);
   assert.deepEqual(restored.binding(id), current);
 });
 
@@ -229,7 +235,9 @@ test('expiry and stored-intent mutation during verification are rechecked at com
     if (kind === 'bytes') f.sql(db => db.prepare('UPDATE binding_intents SET bytes=? WHERE id=?').run(Buffer.from('changed'), intent.id));
     if (kind === 'expiry') f.sql(db => db.prepare('UPDATE binding_intents SET expires_at=expires_at+10000 WHERE id=?').run(intent.id));
     resume.resolve();
-    await assert.rejects(pending, /binding_intent_expired|binding_identity_rejected|binding_intent_changed/);
+    await assert.rejects(pending, /binding_intent_expired|binding_identity_rejected|binding_intent_changed|binding_state_stale/);
+    if (kind === 'bytes' || kind === 'expiry') f.sql(db => db.prepare('UPDATE binding_intents SET bytes=?,expires_at=? WHERE id=?')
+      .run(intent.bytes, intent.expiresAt, intent.id));
     unchanged(f); store.close();
   }
 });
@@ -243,7 +251,8 @@ test('canonical intent rejects altered nonce/key/source/purpose/shape even with 
     const intent = enroll(f.store), payload = JSON.parse(intent.bytes); mutation(payload);
     const bytes = Buffer.from(JSON.stringify(payload, null, 2) + '\n');
     f.sql(db => db.prepare('UPDATE binding_intents SET bytes=?,bytes_hash=? WHERE id=?').run(bytes, sha(bytes), intent.id));
-    await assert.rejects(submit(f.store, intent, sign(bytes)), /binding_intent_changed/);
+    await assert.rejects(submit(f.store, intent, sign(bytes)), /binding_intent_changed|binding_state_stale/);
+    f.sql(db => db.prepare('UPDATE binding_intents SET bytes=?,bytes_hash=? WHERE id=?').run(intent.bytes, intent.hash, intent.id));
   }
   unchanged(f); assert.equal(f.calls, 0);
 });
@@ -300,17 +309,17 @@ test('private directory/database gates refuse permission loss and replaced datab
   unchanged(f);
 });
 
-test('receipt-write failure rolls back enrollment, replacement and retirement; same intent safely retries', async t => {
+test('checkpoint-write failure rolls back enrollment, receipt, replacement and retirement; same intent safely retries', async t => {
   const f = fixture(t);
-  const block = () => f.sql(db => db.exec(`CREATE TRIGGER block_receipt BEFORE UPDATE OF receipt_json ON binding_intents
-    BEGIN SELECT RAISE(ABORT,'test receipt write failure'); END;`));
-  const unblock = () => f.sql(db => db.exec('DROP TRIGGER block_receipt;'));
+  const block = () => f.anchorSql(db => db.exec(`CREATE TRIGGER block_checkpoint BEFORE UPDATE ON checkpoint
+    BEGIN SELECT RAISE(ABORT,'test checkpoint write failure'); END;`));
+  const unblock = () => f.anchorSql(db => db.exec('DROP TRIGGER block_checkpoint;'));
   const enrollment = enroll(f.store); block();
-  await assert.rejects(submit(f.store, enrollment), /test receipt write failure/);
+  await assert.rejects(submit(f.store, enrollment), /test checkpoint write failure/);
   unchanged(f); unblock();
   const id = (await submit(f.store, enrollment)).receipt.bindingId, initial = f.store.binding(id);
   const replacement = replace(f.store, id); block();
-  await assert.rejects(submit(f.store, replacement, sign(replacement.bytes, C2)), /test receipt write failure/);
+  await assert.rejects(submit(f.store, replacement, sign(replacement.bytes, C2)), /test checkpoint write failure/);
   assert.deepEqual(f.store.binding(id), initial); unchanged(f, 1, 1);
   unblock(); await submit(f.store, replacement, sign(replacement.bytes, C2)); unchanged(f, 2, 1, 1);
 });
@@ -354,18 +363,13 @@ test('status expiry at the transactional recheck rolls back before any binding o
   unchanged(f);
 });
 
-test('pre-replacement backup is an older snapshot, not proof of global retirement after restoring it', async t => {
+test('pre-replacement backup refuses against the retained checkpoint after certificate replacement', async t => {
   const f = fixture(t), id = await registered(f), snapshot = join(f.root, 'older-backup');
   await f.store.backupTo(snapshot);
   const replacement = replace(f.store, id);
   await submit(f.store, replacement, sign(replacement.bytes, C2));
-  const restored = f.open(snapshot);
   assert.equal(f.store.binding(id).epoch, 1);
-  assert.equal(restored.binding(id).epoch, 0);
-  assert.equal(restored.binding(id).certificateDigest, C1);
-  // Public authorization must stay disabled until external anti-rollback/recovery
-  // policy exists; a copied old TEST database cannot prove live revocations.
-  assert.equal((await submit(restored, enroll(restored))).receipt.epoch, 0);
+  assert.throws(() => f.open(snapshot), /binding_state_stale/);
   unchanged(f, 2, 1, 1);
 });
 
@@ -383,7 +387,7 @@ test('historical receipt authenticates stored intent and receipt; tampered rows 
     db => db.prepare('UPDATE binding_intents SET receipt_mac=NULL WHERE id=?').run(intent.id)
   ]) {
     f.sql(mutation);
-    await assert.rejects(submit(f.store, intent, cms), /binding_receipt_changed/);
+    await assert.rejects(submit(f.store, intent, cms), /binding_receipt_changed|binding_state_stale/);
     reset();
   }
   assert.equal(f.calls, 1, 'historical refusal must not call verifier');
@@ -396,13 +400,13 @@ test('historical receipt authenticates stored intent and receipt; tampered rows 
 
 test('failed backup publishes no target, removes owned staging, and permits a clean retry', async t => {
   const f = fixture(t), id = await registered(f), target = join(f.root, 'failed-backup');
-  const expectedKeyId = f.sql(db => db.prepare('SELECT key_id FROM binding_meta').get().key_id);
+  const keyPath = join(f.directory, 'mapping.key'), expectedKey = readFileSync(keyPath);
   const pending = f.store.backupTo(target);
   assert.equal(existsSync(target), false, 'incomplete backup must remain unpublished');
   assert.throws(() => f.store.close(), /verification_in_progress/);
-  f.sql(db => db.prepare('UPDATE binding_meta SET key_id=?').run(C1));
+  writeFileSync(keyPath, Buffer.alloc(32, 8));
   await assert.rejects(pending, /mapping_key_changed/);
-  f.sql(db => db.prepare('UPDATE binding_meta SET key_id=?').run(expectedKeyId));
+  writeFileSync(keyPath, expectedKey);
   assert.equal(existsSync(target), false);
   assert.equal(readdirSync(f.root).filter(name => name.startsWith('.failed-backup-staging-')).length, 0);
   await f.store.backupTo(target);
@@ -431,3 +435,204 @@ test('expiry after receipt write but before COMMIT rolls back the entire enrollm
   unchanged(f);
   await submit(f.store, intent); unchanged(f, 1, 1);
 });
+
+test('retained checkpoint is mandatory, private, separate and omitted from ordinary backups', async t => {
+  const f = fixture(t), id = await registered(f), target = join(f.root, 'checkpoint-free-backup');
+  assert.equal(statSync(f.anchor).mode & 0o777, 0o700);
+  assert.equal(statSync(join(f.anchor, 'checkpoint.sqlite')).mode & 0o777, 0o600);
+  assert.throws(() => new PersonalBindings({ directory: f.directory, sdk: f.sdk }), /rollback_anchor_required/);
+  assert.throws(() => new PersonalBindings({ directory: f.directory, anchorDirectory: f.directory, sdk: f.sdk }), /separate_rollback_anchor_required/);
+  await assert.rejects(f.store.backupTo(join(f.anchor, 'ordinary-backup')), /separate_rollback_anchor_required/);
+  await f.store.backupTo(target);
+  assert.equal(existsSync(join(target, 'checkpoint.sqlite')), false);
+  assert.deepEqual(f.open(target).binding(id), f.store.binding(id));
+  assert.throws(() => enablePersonalBindingAnchor({ directory: target, anchorDirectory: join(f.root, 'replacement-anchor') }), /binding_anchor_already_initialized/);
+  assert.equal(existsSync(join(f.root, 'replacement-anchor')), false);
+});
+
+test('missing, insecure, symlinked or replaced checkpoint refuses without recreating it', async t => {
+  const f = fixture(t), id = await registered(f), path = join(f.anchor, 'checkpoint.sqlite'), saved = join(f.root, 'saved-checkpoint.sqlite');
+  renameSync(path, saved);
+  assert.throws(() => f.store.binding(id), /ENOENT/);
+  assert.throws(() => f.open(), /ENOENT/);
+  assert.equal(existsSync(path), false);
+  renameSync(saved, path); chmodSync(path, 0o644);
+  assert.throws(() => f.store.binding(id), /insecure_binding_file/);
+  chmodSync(path, 0o600); chmodSync(f.anchor, 0o755);
+  assert.throws(() => f.store.binding(id), /insecure_binding_directory/);
+  chmodSync(f.anchor, 0o700); renameSync(path, saved); symlinkSync(saved, path);
+  assert.throws(() => f.store.binding(id), /ELOOP/);
+  unlinkSync(path); writeFileSync(path, readFileSync(saved), { flag: 'wx', mode: 0o600 });
+  assert.throws(() => f.store.binding(id), /rollback_anchor_changed/);
+  unlinkSync(path); renameSync(saved, path);
+  assert.equal(f.store.binding(id).epoch, 0); unchanged(f, 1, 1);
+});
+
+test('stale long-lived clone cannot read, issue, submit, replay history or publish backup after another source advances', async t => {
+  const f = fixture(t), initial = enroll(f.store), cms = sign(initial.bytes), accepted = await submit(f.store, initial, cms);
+  const intent = replace(f.store, accepted.receipt.bindingId), snapshot = join(f.root, 'live-clone');
+  await f.store.backupTo(snapshot);
+  const clone = f.open(snapshot);
+  await submit(f.store, intent, sign(intent.bytes, C2));
+  assert.throws(() => clone.binding(accepted.receipt.bindingId), /binding_state_stale/);
+  assert.throws(() => enroll(clone), /binding_state_stale/);
+  await assert.rejects(submit(clone, initial, cms), /binding_state_stale/);
+  await assert.rejects(submit(clone, intent, sign(intent.bytes, C2)), /binding_state_stale/);
+  const target = join(f.root, 'stale-clone-backup');
+  await assert.rejects(clone.backupTo(target), /binding_state_stale/);
+  assert.equal(existsSync(target), false);
+  assert.equal(f.store.binding(accepted.receipt.bindingId).epoch, 1); unchanged(f, 2, 1, 1);
+});
+
+test('parallel current clones cannot both consume one signed intent against the shared checkpoint', async t => {
+  const f = fixture(t), intent = enroll(f.store), cms = sign(intent.bytes), snapshot = join(f.root, 'parallel-clone');
+  await f.store.backupTo(snapshot);
+  const clone = f.open(snapshot);
+  const results = await Promise.allSettled([submit(f.store, intent, cms), submit(clone, intent, cms)]);
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  assert.match(results.find(r => r.status === 'rejected').reason.message, /binding_state_stale/);
+  unchanged(f, 1, 1);
+});
+
+test('same-revision binding/schema tampering fails before an intent can advance the checkpoint', async t => {
+  const f = fixture(t), id = await registered(f);
+  const before = f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get());
+  f.sql(db => db.prepare('UPDATE personal_bindings SET certificate_digest=? WHERE binding_id=?').run(C2, id));
+  assert.throws(() => f.store.binding(id), /binding_state_stale/);
+  assert.throws(() => enroll(f.store), /binding_state_stale/);
+  assert.deepEqual(f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get()), before);
+  f.sql(db => db.prepare('UPDATE personal_bindings SET certificate_digest=? WHERE binding_id=?').run(C1, id));
+  f.sql(db => db.exec(`CREATE TRIGGER unapproved_trigger BEFORE INSERT ON binding_intents BEGIN SELECT RAISE(ABORT,'unsafe'); END;`));
+  assert.throws(() => enroll(f.store), /binding_state_stale/);
+  f.sql(db => db.exec('DROP TRIGGER unapproved_trigger'));
+  assert.equal(f.store.binding(id).certificateDigest, C1); unchanged(f, 1, 1);
+});
+
+test('every intent and receipt advances a matched checkpoint; checkpoint-write failure rolls back intent insertion too', async t => {
+  const f = fixture(t);
+  const revision = () => f.anchorSql(db => db.prepare('SELECT revision FROM checkpoint').get().revision);
+  assert.equal(revision(), 0);
+  const intent = enroll(f.store); assert.equal(revision(), 1);
+  await submit(f.store, intent); assert.equal(revision(), 2);
+  await submit(f.store, intent); assert.equal(revision(), 2, 'history never advances checkpoint');
+  f.anchorSql(db => db.exec(`CREATE TRIGGER block_intent BEFORE UPDATE ON checkpoint BEGIN SELECT RAISE(ABORT,'checkpoint denied'); END;`));
+  assert.throws(() => enroll(f.store), /checkpoint denied/);
+  assert.equal(f.sql(db => db.prepare('SELECT count(*) AS n FROM binding_intents').get().n), 1);
+  assert.equal(revision(), 2);
+  f.anchorSql(db => db.exec('DROP TRIGGER block_intent'));
+  assert.equal(f.sql(db => db.prepare('SELECT revision FROM binding_meta').get().revision), 2);
+  enroll(f.store); assert.equal(revision(), 3);
+});
+
+test('retained checkpoint identity/epoch mismatch and unsafe WAL source refuse', async t => {
+  const f = fixture(t), initial = f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get());
+  for (const [column, value, error] of [['key_id', C1, /rollback_anchor_mismatch/],
+    ['revision', 99, /binding_state_stale/], ['state_hash', C2, /binding_state_stale/]]) {
+    f.anchorSql(db => db.prepare(`UPDATE checkpoint SET ${column}=?`).run(value));
+    assert.throws(() => enroll(f.store), error);
+    f.anchorSql(db => db.prepare(`UPDATE checkpoint SET ${column}=?`).run(initial[column]));
+  }
+  f.store.close();
+  f.sql(db => db.exec('PRAGMA journal_mode=WAL;'));
+  assert.throws(() => f.open(), /unsafe_binding_journal/);
+  f.sql(db => db.exec('PRAGMA journal_mode=DELETE;'));
+  assert.doesNotThrow(() => f.open()); unchanged(f);
+});
+
+function legacyMeta(f) {
+  f.store.close();
+  f.sql(db => db.exec(`ALTER TABLE binding_meta RENAME TO newer_meta;
+    CREATE TABLE binding_meta(singleton INTEGER PRIMARY KEY CHECK(singleton=1),domain TEXT NOT NULL,key_id TEXT NOT NULL) STRICT;
+    INSERT INTO binding_meta SELECT singleton,domain,key_id FROM newer_meta;
+    DROP TABLE newer_meta; PRAGMA journal_mode=WAL;`));
+}
+
+test('explicit empty-legacy upgrade preserves key, switches from WAL, and never runs automatically', t => {
+  const f = fixture(t), key = readFileSync(join(f.directory, 'mapping.key'));
+  legacyMeta(f);
+  assert.throws(() => f.open(), /rollback_anchor_required/);
+  const anchor = join(f.root, 'explicit-new-anchor');
+  enablePersonalBindingAnchor({ directory: f.directory, anchorDirectory: anchor });
+  assert.ok(readFileSync(join(f.directory, 'mapping.key')).equals(key)); key.fill(0);
+  const opened = new PersonalBindings({ directory: f.directory, anchorDirectory: anchor, sdk: f.sdk });
+  opened.close();
+  assert.equal(f.sql(db => db.prepare('PRAGMA journal_mode').get().journal_mode), 'delete');
+  assert.throws(() => enablePersonalBindingAnchor({ directory: f.directory, anchorDirectory: anchor }), /binding_anchor_already_initialized/);
+});
+
+test('legacy upgrade refuses a nonempty old database instead of trusting or resetting it', async t => {
+  const f = fixture(t); await registered(f); legacyMeta(f);
+  const anchor = join(f.root, 'must-not-bootstrap');
+  assert.throws(() => enablePersonalBindingAnchor({ directory: f.directory, anchorDirectory: anchor }), /nonempty_legacy_binding/);
+  assert.equal(existsSync(anchor), false); unchanged(f, 1, 1);
+});
+
+test('local checkpoint is not a hardware authority: rolling BOTH stores backwards is outside the retained-anchor guarantee', async t => {
+  const f = fixture(t), id = await registered(f), snapshot = join(f.root, 'whole-host-old-snapshot');
+  await f.store.backupTo(snapshot);
+  const oldAnchor = f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get());
+  const replacement = replace(f.store, id); await submit(f.store, replacement, sign(replacement.bytes, C2));
+  assert.throws(() => f.open(snapshot), /binding_state_stale/);
+  // Deliberate trusted-side fixture rollback. No public API can perform this.
+  f.anchorSql(db => db.prepare('UPDATE checkpoint SET revision=?,state_hash=?').run(oldAnchor.revision, oldAnchor.state_hash));
+  assert.equal(f.open(snapshot).binding(id).certificateDigest, C1);
+  assert.throws(() => f.store.binding(id), /binding_state_stale/);
+});
+
+test('in-place restore of an old binding database refuses after restart even when its inode and mapping key stay unchanged', async t => {
+  const f = fixture(t), id = await registered(f), snapshot = join(f.root, 'in-place-old-copy');
+  await f.store.backupTo(snapshot);
+  const replacement = replace(f.store, id); await submit(f.store, replacement, sign(replacement.bytes, C2));
+  f.store.close();
+  const path = join(f.directory, 'personal.sqlite'), inode = statSync(path).ino;
+  copyFileSync(join(snapshot, 'personal.sqlite'), path);
+  assert.equal(statSync(path).ino, inode);
+  assert.throws(() => f.open(), /binding_state_stale/);
+});
+
+test('backup that overlaps a same-connection state advance is discarded rather than publishing another revision', async t => {
+  const f = fixture(t), target = join(f.root, 'overlap-backup');
+  const pending = f.store.backupTo(target);
+  // Node supports same-connection source mutation while online backup runs.
+  // Snapshot revision/digest must not silently change with that copy.
+  enroll(f.store);
+  // SQLite may abort an in-progress copy when the same connection writes; both
+  // native abort and our revision rejection must leave the target unpublished.
+  await assert.rejects(pending);
+  assert.equal(existsSync(target), false);
+  assert.equal(readdirSync(f.root).filter(name => name.startsWith('.overlap-backup-staging-')).length, 0);
+  await f.store.backupTo(target);
+  assert.doesNotThrow(() => f.open(target)); unchanged(f);
+});
+
+test('expiry after checkpoint hashing rolls back BOTH receipt and checkpoint before COMMIT', async t => {
+  const f = fixture(t), intent = enroll(f.store), before = f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get());
+  const outcome = await f.sdk.verifyIdentity(intent.bytes, sign(intent.bytes));
+  let calls = 0;
+  const store = f.open(f.directory, { statusSource: 'test_ocsp', async verifyIdentity() { return outcome; } },
+    () => ++calls >= 8 ? outcome.validUntil : f.time);
+  await assert.rejects(submit(store, intent), /binding_status_expired/);
+  assert.deepEqual(f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get()), before);
+  unchanged(f);
+  await submit(f.store, intent); unchanged(f, 1, 1);
+});
+
+test('orphaned empty bootstrap needs explicit safe resume; an initialized checkpoint can never be reset that way', t => {
+  const f = fixture(t); legacyMeta(f);
+  const retained = f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get());
+  assert.throws(() => enablePersonalBindingAnchor({ directory: f.directory, anchorDirectory: f.anchor,
+    resumeEmptyBootstrap: true }), /anchor_state_exists/);
+  assert.deepEqual(f.anchorSql(db => db.prepare('SELECT * FROM checkpoint').get()), retained);
+  const anchor = join(f.root, 'orphaned-bootstrap');
+  // Simulate interruption after wx creation but before the attached commit.
+  initializeOrphan(anchor);
+  assert.throws(() => enablePersonalBindingAnchor({ directory: f.directory, anchorDirectory: anchor }), /anchor_state_exists/);
+  enablePersonalBindingAnchor({ directory: f.directory, anchorDirectory: anchor, resumeEmptyBootstrap: true });
+  const opened = new PersonalBindings({ directory: f.directory, anchorDirectory: anchor, sdk: f.sdk }); opened.close();
+  assert.throws(() => enablePersonalBindingAnchor({ directory: f.directory, anchorDirectory: anchor, resumeEmptyBootstrap: true }), /binding_anchor_already_initialized/);
+});
+
+function initializeOrphan(anchor) {
+  mkdirSync(anchor, { mode: 0o700 });
+  writeFileSync(join(anchor, 'checkpoint.sqlite'), Buffer.alloc(0), { flag: 'wx', mode: 0o600 });
+}
