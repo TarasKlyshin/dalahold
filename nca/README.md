@@ -56,13 +56,43 @@ the response contains one. `TestCmsSigner` labels this diagnostic
 OCSP fallback is enabled. The separate adapter above now validates these
 conditions; it does not call that utility for acceptance.
 
-Current verification: 83 Node cases + 7 offline Solana cases; 3 additional SDK
+Current verification: 85 Node cases + 7 offline Solana cases; 3 additional SDK
 runs (default CRL refusal, 47 signed synthetic/transport checks, live TEST OCSP
 CMS-to-HTTP acceptance). Synthetic revoked/delegated responders establish
 policy behavior, not coverage of genuine official revoked/wrong-purpose
 certificates. Official rules, archive provenance, stable identity, powers,
 rotation and independent review remain unaccepted. Claude Opus 5.5/max's
 read-only review timed out after 240 seconds with no findings.
+
+### Client continuation, 30 September 2026
+
+Baseline `445908b8125b4ee3a58c8813a26c5250d21d9ec7`. Read-only inspection of
+the installed Basics/Commons module confirms that dismissing its dialog returns
+`EmptyResponse`; `CommonInvoker` wraps normal returns as `status:true`, with
+`body:{}` for that response. This is **not a successful signature**. The client
+now classifies it as cancellation instead of unsupported data; malformed or
+nonempty unexpected bodies still refuse. The exact historical unsupported
+frame was not captured, so that earlier event's cause is not independently
+confirmed from its payload.
+
+Two failing-before/passing-after regressions cover the cancellation label and
+a late `onopen` sending a signing request after timeout. Finished sockets now
+ignore late open/message callbacks. A 160,000-character frame cap applies
+before JSON parsing, including large extra fields around a small signature.
+The server's CMS/status/source/expiry acceptance is unchanged.
+
+A shape-only local protocol diagnostic observed the greeting, then timed out
+without a method response. No container, subject, identity or password was
+printed. Browser recheck confirms normal TLS connection, exact OCSP-bound
+instruction issuance, disabled retry without CMS and a safe journal; no
+browser receipt or actual cancel/positive-signing acceptance is claimed.
+The Java dialog remains inaccessible through the UI connector, so user-assisted
+dialog dismissal and bundled-test-certificate selection are still required.
+
+Claude Code 2.1.283 reports an authenticated first-party session. A tools-disabled
+read-only patch review requested `claude-opus-5-5` / max and timed out after
+60 seconds with no output. Actual model execution and independent review are
+not confirmed; no model fallback or authentication change was attempted.
 
 ## Start and check
 

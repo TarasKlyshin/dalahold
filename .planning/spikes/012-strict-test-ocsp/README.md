@@ -108,3 +108,25 @@ then verify a browser receipt/retry. Independent security review, genuine
 wrong-purpose/revoked and same-identity replacement fixtures, official rules,
 SDK provenance, identity mapping and powers remain open. Do not connect the
 stand to `authority/`, deal decisions or devnet until their gates are verified.
+
+## Client continuation from pushed 445908b
+
+- Inspected the installed Basics `PKIExtras` and Commons `CommonInvoker` bytecode,
+  not private application logs: dialog dismissal returns `EmptyResponse` and
+  is wrapped as `status:true, body:{}`. The client incorrectly labelled this
+  valid cancellation envelope as unsupported. Exact historical response was
+  not retained; this finding does not prove the earlier payload was cancellation.
+- Added failing regressions, then classified this envelope as cancellation and
+  blocked `onopen`/`onmessage` after a completed/timed-out call. A frame limit
+  now rejects oversized extra fields before parsing, not just long signatures.
+  No accepted signature formats or server authorization checks were broadened.
+- 85 Node + 7 offline Solana cases and all 3 SDK runs pass. Browser reload/TLS
+  connection, exact instruction and safe journal pass; retry stays disabled
+  without CMS. No usable NCALayer CMS, browser receipt, real dialog-cancel test
+  or natural-user acceptance has been completed.
+- The shape-only local signing diagnostic timed out after its greeting. The
+  Java dialog is still inaccessible to the UI connector; user-assisted
+  cancellation/selection is requested, with no personal key or password in chat.
+- Claude CLI auth is valid, but a minimal tools-disabled Opus 5.5/max patch
+  review timed out after 60 seconds with no output. No model fallback,
+  independent review or production acceptance is claimed.

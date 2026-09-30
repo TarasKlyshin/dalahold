@@ -13,6 +13,10 @@ export function signingRequest(challenge, chain) {
 
 export function signatureFromResponse(response) {
   if (response?.status !== true) throw new Error('signing_cancelled_or_rejected');
+  // Basics EmptyResponse (dialog dismissed) is wrapped as status:true, body:{}.
+  // It is cancellation, never a successful signing result.
+  if (response.body && typeof response.body === 'object' && !Array.isArray(response.body) &&
+      Object.keys(response.body).length === 0) throw new Error('signing_cancelled_or_rejected');
   const result = response.body?.result;
   const value = result && typeof result === 'object' && !Array.isArray(result)
     ? result.signatures : result;
@@ -35,13 +39,16 @@ export function ncalayerCall(request, { WebSocketClass = globalThis.WebSocket, t
     };
     const timer = setTimeout(() => done(new Error('ncalayer_timeout')), timeout);
     socket.onopen = () => {
+      if (finished) return;
       if (!request) done(null, true);
       else socket.send(JSON.stringify(request));
     };
     socket.onerror = () => done(new Error('ncalayer_unavailable'));
     socket.onclose = () => done(new Error('ncalayer_disconnected'));
     socket.onmessage = ({ data }) => {
+      if (finished) return;
       try {
+        if (typeof data !== 'string' || data.length > 160_000) throw new Error('invalid_ncalayer_response');
         const response = JSON.parse(data);
         // NCALayer sends its protocol version independently of the method response.
         if (response?.result?.version && !Object.hasOwn(response, 'status')) return;

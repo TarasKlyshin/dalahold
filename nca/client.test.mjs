@@ -32,10 +32,13 @@ test('one socket ignores the greeting, closes after signing, and rejects cancel/
   socket.onmessage({ data: JSON.stringify({ status: true, body: { result: 'Y21z' } }) });
   assert.equal(await pending, 'Y21z');
   assert.equal(socket.closed, true);
-  pending = ncalayerCall({}, { WebSocketClass: Socket, timeout: 100 });
-  await Promise.resolve();
-  Socket.last.onmessage({ data: JSON.stringify({ status: false }) });
-  await assert.rejects(pending, /signing_cancelled_or_rejected/);
+  for (const cancellation of [{ status: false }, { status: true, body: {} }]) {
+    pending = ncalayerCall({}, { WebSocketClass: Socket, timeout: 100 });
+    await Promise.resolve();
+    Socket.last.onmessage({ data: JSON.stringify(cancellation) });
+    await assert.rejects(pending, /signing_cancelled_or_rejected/);
+    assert.equal(Socket.last.closed, true);
+  }
   pending = ncalayerCall({}, { WebSocketClass: Socket, timeout: 100 });
   await Promise.resolve();
   Socket.last.onclose();
@@ -46,4 +49,34 @@ test('one socket ignores the greeting, closes after signing, and rejects cancel/
   Socket.last.onerror();
   await assert.rejects(pending, /ncalayer_unavailable/);
   assert.equal(await ncalayerCall(null, { WebSocketClass: Socket }), true);
+});
+
+test('Basics EmptyResponse is cancellation, not a signature or unsupported success payload', () => {
+  // Installed Basics returns EmptyResponse on dialog dismissal. CommonInvoker
+  // wraps a normal method return as status:true, body:{}, not status:false.
+  assert.throws(() => signatureFromResponse({ status: true, body: {} }),
+    /signing_cancelled_or_rejected/);
+  for (const body of [null, [], { result: null }, { result: '' }, { other: 'claim' }]) {
+    assert.throws(() => signatureFromResponse({ status: true, body }), /invalid_ncalayer_response/);
+  }
+});
+
+test('timed-out socket cannot issue a late signing request; oversized responses refuse', async () => {
+  class Socket {
+    constructor() { Socket.last = this; }
+    close() { this.closed = true; }
+    send(value) { this.sent = value; }
+  }
+  const expired = ncalayerCall({ method: 'sign' }, { WebSocketClass: Socket, timeout: 5 });
+  const late = Socket.last;
+  await assert.rejects(expired, /ncalayer_timeout/);
+  late.onopen();
+  assert.equal(late.sent, undefined, 'a timed-out operation issued a signing request');
+  const oversized = ncalayerCall({ method: 'sign' }, { WebSocketClass: Socket, timeout: 100 });
+  const socket = Socket.last;
+  socket.onopen();
+  socket.onmessage({ data: JSON.stringify({ status: true, body: { result: 'Y21z' },
+    padding: 'x'.repeat(160_001) }) });
+  await assert.rejects(oversized, /invalid_ncalayer_response/);
+  assert.equal(socket.closed, true);
 });

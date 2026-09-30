@@ -69,7 +69,7 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 
 `mvp_complete: false`
 
-`tests_passing: true` (83 Node + 7 offline Solana cases, plus 3 SDK runs including 47 synthetic/transport checks, CRL refusal and live TEST OCSP HTTP acceptance, as of 2026-09-30; not NCALayer end-to-end acceptance)
+`tests_passing: true` (85 Node + 7 offline Solana cases, plus 3 SDK runs including 47 synthetic/transport checks, CRL refusal and live TEST OCSP HTTP acceptance, as of 2026-09-30; not NCALayer end-to-end acceptance)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)
@@ -202,3 +202,17 @@ The master plan and acceptance criteria remain in `IMPLEMENTATION_PLAN.md` and
 - Claude Opus 5.5/max read-only review timed out after 240 seconds with no
   output. Independent review remains open, as do official rules/provenance,
   stable identity, powers, rotation, private documents, payments and devnet.
+
+## 2026-09-30 NCALayer client continuation
+
+- Baseline private `main` at `445908b8125b4ee3a58c8813a26c5250d21d9ec7`.
+  Installed module bytecode establishes `status:true, body:{}` as dialog
+  dismissal; client now reports cancellation, never a signature. The earlier
+  raw frame was not retained, so its exact cause remains unconfirmed.
+- Added failing-before/passing-after cancellation and late-open-after-timeout
+  regressions, plus a pre-parse frame cap. Server trust/status checks unchanged.
+- 92 local cases + 3 SDK runs pass. Browser connects, issues exact OCSP-bound
+  instruction and shows a safe journal; no usable CMS/browser receipt obtained.
+  Java dialog control remains unavailable; human cancellation/selection required.
+- Authenticated Claude CLI, but tools-disabled Opus 5.5/max review timed out
+  after 60 seconds without output; actual execution model and review unconfirmed.
