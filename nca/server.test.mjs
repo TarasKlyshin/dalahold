@@ -14,7 +14,7 @@ const fakeSdk = {
   inspect: async () => ({ ready: true, statusSource: 'test_crl_fixture',
     validUntil: Date.now() + 3_600_000, chain: ['-----BEGIN CERTIFICATE-----A', '-----BEGIN CERTIFICATE-----B'] }),
   verify: async (bytes, cms) => ({ verified: cms.equals(bytes),
-    certificateDigest: digest, validUntil: Date.now() + 3_600_000 }),
+    certificateDigest: digest, validUntil: Date.now() + 3_600_000, statusSource: 'test_crl_fixture' }),
 };
 
 export async function startProbe(dbPath, options = {}) {
@@ -127,7 +127,7 @@ test('expiry or changed bytes while verification awaits are checked again at com
     let clock = Date.now();
     let mutate;
     const app = await startProbe(dbPath, { now: () => clock, sdk: {
-      ...fakeSdk, verify: async () => { mutate(); return { verified: true, certificateDigest: digest,
+      ...fakeSdk, verify: async () => { mutate(); return { verified: true, certificateDigest: digest, statusSource: 'test_crl_fixture',
         validUntil: mutation === 'status' ? clock : clock + 10000 }; },
     } });
     const created = await challenge(app);
@@ -172,7 +172,7 @@ test('two different valid concurrent containers cannot create two receipts and a
   let crash = true;
   const app = await startProbe(temporary(t), { sdk: { ...fakeSdk, verify: async () => {
     if (crash) throw new Error('do not expose SDK certificate details');
-    return { verified: true, certificateDigest: digest, validUntil: Date.now() + 10000 };
+    return { verified: true, certificateDigest: digest, validUntil: Date.now() + 10000, statusSource: 'test_crl_fixture' };
   } } });
   t.after(() => app.close());
   const created = await challenge(app);
@@ -184,4 +184,45 @@ test('two different valid concurrent containers cannot create two receipts and a
   const responses = await Promise.all([app.post('/api/verify', input), app.post('/api/verify', {
     ...input, cms: Buffer.from('second valid CMS').toString('base64') })]);
   assert.deepEqual(responses.map((item) => item.status).sort(), [200, 409]);
+});
+
+test('explicit OCSP mode binds source and short status expiry; wrong source cannot issue a receipt', async (t) => {
+  let clock = Date.now();
+  let resultSource = 'test_crl_fixture';
+  const dbPath = temporary(t);
+  const ocsp = { ...fakeSdk, statusSource: 'test_ocsp',
+    inspect: async () => ({ ...(await fakeSdk.inspect()), statusSource: 'test_ocsp' }),
+    verify: async () => ({ verified: true, certificateDigest: digest,
+      validUntil: clock + 5000, statusSource: resultSource }) };
+  const app = await startProbe(dbPath, { sdk: ocsp, now: () => clock });
+  t.after(() => app.close());
+  const created = await challenge(app);
+  assert.equal(JSON.parse(created.text).statusSource, 'test_ocsp');
+  const input = { challengeId: created.id, cms: created.bytesBase64 };
+  assert.equal((await app.post('/api/verify', input)).status, 503);
+  resultSource = 'test_ocsp';
+  const receipt = (await (await app.post('/api/verify', input)).json()).receipt;
+  assert.equal(receipt.statusSource, 'test_ocsp');
+  assert.equal(receipt.validUntil, clock + 5000);
+  clock += 10000;
+  const replay = await app.post('/api/verify', input);
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).replay, true);
+});
+
+test('switching status mode across restart rejects a pending instruction instead of falling back', async (t) => {
+  const dbPath = temporary(t);
+  let app = await startProbe(dbPath);
+  const created = await challenge(app);
+  const cookie = app.cookie;
+  await app.close();
+  let verifies = 0;
+  app = await startProbe(dbPath, { sdk: { ...fakeSdk, statusSource: 'test_ocsp',
+    inspect: async () => ({ ...(await fakeSdk.inspect()), statusSource: 'test_ocsp' }),
+    verify: async () => { verifies++; throw new Error('must not fall back'); } } });
+  t.after(() => app.close());
+  const response = await app.post('/api/verify', { challengeId: created.id, cms: created.bytesBase64 }, { Cookie: cookie });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: 'status_source_changed' });
+  assert.equal(verifies, 0);
 });

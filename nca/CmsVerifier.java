@@ -16,6 +16,7 @@ import java.util.Date;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Arrays;
+import java.util.Set;
 
 import kz.gov.pki.kalkan.asn1.ASN1InputStream;
 import kz.gov.pki.kalkan.asn1.ASN1OctetString;
@@ -28,6 +29,10 @@ public final class CmsVerifier {
   static final Provider PROVIDER = new KalkanProvider();
   static { Security.addProvider(PROVIDER); }
   static final String SIGNING_EKU = "1.3.6.1.5.5.7.3.4";
+  // Approved public TEST CA snapshot. Pinning prevents SDK-path/config mistakes;
+  // these hashes identify the local assets, not independent archive provenance.
+  static final String TEST_ROOT = "b995e79e7c07429f8f79e185451e5599ce342ac720000f01b3854fdfa03031a6";
+  static final String TEST_ISSUER = "beeffc0bdb77cd798c35983eb0715f6ef0051cccb71d7cd05505e8a4fb2c6f4d";
   static String stage = "test_ca";
 
   record Assets(X509Certificate root, X509Certificate ca, List<X509CRL> crls,
@@ -36,6 +41,10 @@ public final class CmsVerifier {
 
   static void check(boolean condition) {
     if (!condition) throw new IllegalArgumentException("test verification rejected");
+  }
+
+  static String digest(X509Certificate certificate) throws Exception {
+    return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(certificate.getEncoded()));
   }
 
   private static X509Certificate certificate(CertificateFactory factory, Path path)
@@ -73,12 +82,13 @@ public final class CmsVerifier {
     return assets(sdk, sdk.resolve("Keys and Certs/CRL"), now);
   }
 
-  static Assets assets(Path sdk, Path crlDirectory, Date now) throws Exception {
+  static Assets testChain(Path sdk, Date now) throws Exception {
     stage = "test_ca";
     var factory = CertificateFactory.getInstance("X.509", PROVIDER);
     Path directory = sdk.resolve("Keys and Certs");
     var root = certificate(factory, directory.resolve("CA_Test/ROOT/root_test_gost_2022.cer"));
     var ca = certificate(factory, directory.resolve("CA_Test/NCA/nca_gost2022_test.cer"));
+    check(digest(root).equals(TEST_ROOT) && digest(ca).equals(TEST_ISSUER));
     root.checkValidity(now);
     ca.checkValidity(now);
     check(root.getBasicConstraints() >= 0 && ca.getBasicConstraints() >= 0);
@@ -90,6 +100,15 @@ public final class CmsVerifier {
       checkSignature(certificate.getSigAlgName(), root.getPublicKey(),
           certificate.getTBSCertificate(), certificate.getSignature());
     }
+    return new Assets(root, ca, List.of(),
+        Math.min(root.getNotAfter().getTime(), ca.getNotAfter().getTime()));
+  }
+
+  static Assets assets(Path sdk, Path crlDirectory, Date now) throws Exception {
+    var chain = testChain(sdk, now);
+    var root = chain.root();
+    var ca = chain.ca();
+    var factory = CertificateFactory.getInstance("X.509", PROVIDER);
     stage = "crl_files";
     var base = crl(factory, crlDirectory.resolve("nca_gost2022_test.crl"));
     var delta = crl(factory, crlDirectory.resolve("nca_gost2022_d_test.crl"));
@@ -115,10 +134,10 @@ public final class CmsVerifier {
     return new Assets(root, ca, crls, until);
   }
 
-  static Receipt verify(byte[] cms, byte[] bytes, Assets assets, Date now) throws Exception {
+  static X509Certificate verifiedSigner(byte[] cms, byte[] bytes, Assets assets, Date now)
+      throws Exception {
     check(bytes.length > 0 && bytes.length <= 8192 && cms.length > 0 && cms.length <= 98304);
     check(assets.validUntil() > now.getTime());
-    check(assets.crls().size() == 2);
     var parsed = CMSUtil.parseAsCMS(cms);
     check(parsed.getSignedContent() == null);
     check(CMSUtil.getSignerInformations(parsed).size() == 1);
@@ -132,8 +151,22 @@ public final class CmsVerifier {
     check(usage != null && usage.length > 1 && (usage[0] || usage[1]));
     var eku = signer.getExtendedKeyUsage();
     check(eku != null && eku.contains(SIGNING_EKU));
+    var critical = signer.getCriticalExtensionOIDs();
+    check(critical == null || Set.of("2.5.29.19", "2.5.29.15", "2.5.29.37").containsAll(critical));
     checkSignature(signer.getSigAlgName(), assets.ca().getPublicKey(),
         signer.getTBSCertificate(), signer.getSignature());
+    CMSUtil.verifyCMS(cms, bytes, PROVIDER);
+    return signer;
+  }
+
+  static Receipt receipt(X509Certificate signer, Assets assets, long statusUntil) throws Exception {
+    return new Receipt(digest(signer), Math.min(statusUntil,
+        Math.min(assets.validUntil(), signer.getNotAfter().getTime())));
+  }
+
+  static Receipt verify(byte[] cms, byte[] bytes, Assets assets, Date now) throws Exception {
+    check(assets.crls().size() == 2);
+    var signer = verifiedSigner(cms, bytes, assets, now);
     for (var list : assets.crls()) check(!list.isRevoked(signer));
     var results = CMSUtil.verifyCMS(cms, bytes, new VerifierFlags(VerifierFlags.SIGNATURE),
         List.of(assets.ca()), assets.crls(), PROVIDER);
@@ -141,9 +174,7 @@ public final class CmsVerifier {
     var result = results.iterator().next();
     check(result.isValid() && result.getVerifyX509CertifcateResult().isValid());
     check(signer.equals(result.getVerifyX509CertifcateResult().getX509Certificate()));
-    String digest = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-        .digest(signer.getEncoded()));
-    return new Receipt(digest, Math.min(assets.validUntil(), signer.getNotAfter().getTime()));
+    return receipt(signer, assets, assets.validUntil());
   }
 
   private static String pem(X509Certificate certificate) throws Exception {
@@ -156,15 +187,18 @@ public final class CmsVerifier {
     String error = "status_unavailable";
     try {
       check(args.length == 3);
+      check(List.of("inspect", "verify", "inspect_ocsp", "verify_ocsp").contains(args[2]));
       Path sdk = Path.of(args[0]);
-      Assets assets = assets(sdk, Path.of(args[1]), new Date());
-      if (args[2].equals("inspect")) {
-        System.out.println("{\"ready\":true,\"statusSource\":\"test_crl_fixture\",\"validUntil\":" +
+      boolean ocsp = args[2].endsWith("_ocsp");
+      String source = ocsp ? "test_ocsp" : "test_crl_fixture";
+      Assets assets = ocsp ? testChain(sdk, new Date()) : assets(sdk, Path.of(args[1]), new Date());
+      if (args[2].startsWith("inspect")) {
+        // OCSP readiness covers local trust/config only, not any leaf status.
+        System.out.println("{\"ready\":true,\"statusSource\":\"" + source + "\",\"validUntil\":" +
             assets.validUntil() + ",\"chain\":[\"" + pem(assets.ca()) + "\",\"" +
             pem(assets.root()) + "\"]}");
         return;
       }
-      check(args[2].equals("verify"));
       error = "signature_rejected";
       stage = "cms";
       var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.US_ASCII));
@@ -172,14 +206,21 @@ public final class CmsVerifier {
       String cms = input.readLine();
       check(bytes != null && bytes.length() <= 12000 && cms != null && cms.length() <= 131072);
       check(input.readLine() == null);
-      var receipt = verify(Base64.getDecoder().decode(cms), Base64.getDecoder().decode(bytes),
-          assets, new Date());
+      byte[] signed = Base64.getDecoder().decode(cms), exact = Base64.getDecoder().decode(bytes);
+      Receipt receipt;
+      if (ocsp) {
+        var signer = verifiedSigner(signed, exact, assets, new Date());
+        stage = "ocsp";
+        error = "status_unavailable";
+        receipt = receipt(signer, assets, OcspVerifier.online(signer, assets.ca()));
+      } else receipt = verify(signed, exact, assets, new Date());
       System.out.println("{\"verified\":true,\"certificateDigest\":\"" +
-          receipt.certificateDigest() + "\",\"validUntil\":" + receipt.validUntil() + "}");
+          receipt.certificateDigest() + "\",\"validUntil\":" + receipt.validUntil() +
+          ",\"statusSource\":\"" + source + "\"}");
     } catch (Exception failure) {
       // Never print SDK exceptions: they can contain certificate subject data.
       System.out.println("{\"verified\":false,\"error\":\"" + error +
-          "\",\"reason\":\"" + stage + "\"}");
+          "\",\"reason\":\"" + (stage.equals("ocsp") ? OcspVerifier.stage : stage) + "\"}");
     }
   }
 }

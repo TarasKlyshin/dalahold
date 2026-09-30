@@ -47,9 +47,12 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
   session-bound challenge bytes and atomic one-use test receipts. It is not
   connected to owner/deal/grant state. The SDK and test keys remain outside
   Git; no personal certificate is used. Cryptography and NCALayer TLS connect
-  are tested, but incompatible base/delta CRLs block status acceptance and
-  issuance. The older isolated probe missed this relationship and is now
-  corrected. Test OCSP responds but is not yet a trusted status adapter.
+  are tested. In explicit TEST OCSP mode, strict responder trust/CertID/nonce/
+  freshness checks now pass SDK-generated CMS → one-use HTTP test receipt.
+  Incompatible base/delta CRLs still close default CRL mode, without fallback.
+  A browser signing request returned an unsupported NCALayer response; no
+  usable NCALayer CMS or browser receipt has passed acceptance. Independent
+  review, identity/powers and official negative fixtures remain open.
 
 ## Build status
 
@@ -61,12 +64,12 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 | 3a. Offline deal decisions | complete as a test policy and durable ledger; not in browser | Ordered actor/terms-bound decisions, replay and altered-request rejection, dispute stop, restart and cross-deal checks |
 | 3b. Signed-byte handoff | complete as an offline fixture; not in browser | Exact persisted challenge over server-read unsigned terms, test signature/powers, stale/expired/replay/dispute checks |
 | 3c. Immutable local terms and demo record | complete as an offline fixture; not in browser | Full bound terms persist, pre-offer refresh and post-offer freeze, same-file transactional draft check, version-filtered metadata, fail-closed receipt record |
-| 4. NCA verifier and NCALayer | Separate local browser/API/Java stand implemented; status acceptance blocked by incompatible official test CRLs | Coherent revocation status, actual NCALayer CMS roundtrip, powers and negative fixtures still open |
+| 4. NCA verifier and NCALayer | Strict explicit TEST OCSP passes SDK-to-HTTP test acceptance; default CRL mode remains blocked | Actual NCALayer CMS roundtrip, independent review, identity/powers and official negative/rotation fixtures still open |
 | 5. Devnet acceptance | pending | Confirmed exact test transfer and all required negative cases; no real KZT |
 
 `mvp_complete: false`
 
-`tests_passing: true` (81 Node tests plus 7 offline Solana tests, and 1 SDK cryptography/status-refusal integration test, as of 2026-09-30; not NCA end-to-end acceptance)
+`tests_passing: true` (83 Node + 7 offline Solana cases, plus 3 SDK runs including 47 synthetic/transport checks, CRL refusal and live TEST OCSP HTTP acceptance, as of 2026-09-30; not NCALayer end-to-end acceptance)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)
@@ -178,3 +181,24 @@ The master plan and acceptance criteria remain in `IMPLEMENTATION_PLAN.md` and
   findings. No independent review is claimed. Next: coherent public test CRLs
   or a separately implemented/reviewed strict OCSP adapter, then supervised
   NCALayer output acceptance. Identity, powers, rotation and devnet remain gated.
+
+## 2026-09-30 push and strict TEST OCSP stage
+
+- Preserved and pushed the prior local work to private `main` at
+  `acc193c8df402370ef59784865e47f45e2280de3`; remote SHA readback matched.
+  This is source publication to the existing private repo, not deployment.
+- Spike 012 adds strict fixed-endpoint TEST OCSP with pinned public TEST CAs,
+  responder trust/purpose/signature, exact CertID, random 32-byte nonce, bounded
+  freshness and fail-closed transport. No new dependency or service. CRL mode
+  is unchanged and remains closed for the incoherent public test pair.
+- Signed source is fixed per instruction. Status expiry is rechecked at commit;
+  changing mode cannot reinterpret a pending request. No user/business grants.
+- All 90 local cases and 3 SDK runs pass. The synthetic test includes 47 policy/
+  transport checks, including a failing-before/passing-after weak-signature
+  regression. Official revoked/wrong-purpose keys are still needed.
+- Browser shows OCSP-mode local trust readiness and exact instruction; NCALayer
+  connects normally but signing returned an unsupported response. No usable
+  CMS/browser receipt, certificate selection or natural-user acceptance claimed.
+- Claude Opus 5.5/max read-only review timed out after 240 seconds with no
+  output. Independent review remains open, as do official rules/provenance,
+  stable identity, powers, rotation, private documents, payments and devnet.

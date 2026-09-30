@@ -16,14 +16,16 @@ export function javaProcess(binary, args, input = '', timeout = 15_000) {
 }
 
 export async function prepareSdk({ sdkRoot, javaBin = '/opt/homebrew/opt/openjdk@17/bin',
-  crlDirectory = sdkRoot && join(sdkRoot, 'Keys and Certs/CRL') }) {
+  crlDirectory = sdkRoot && join(sdkRoot, 'Keys and Certs/CRL'), statusSource = 'crl' }) {
   if (typeof sdkRoot !== 'string' || !sdkRoot) throw new Error('NCA_SDK_ROOT required');
+  if (!['crl', 'ocsp'].includes(statusSource)) throw new Error('unsupported_test_status_source');
   const build = await mkdtemp(join(tmpdir(), 'dalahold-nca-'));
   const jars = ['Java/provider/kalkancrypt-0.7.8-current.jar',
     'Java/utils/knca_provider_util-0.8.5.jar'].map((name) => join(sdkRoot, name)).join(delimiter);
   try {
     await javaProcess(join(javaBin, 'javac'), ['-encoding', 'UTF-8', '-d', build, '-cp', jars,
-      fileURLToPath(new URL('./CmsVerifier.java', import.meta.url))]);
+      fileURLToPath(new URL('./CmsVerifier.java', import.meta.url)),
+      fileURLToPath(new URL('./OcspVerifier.java', import.meta.url))]);
   } catch (error) {
     await rm(build, { recursive: true, force: true });
     throw error;
@@ -32,10 +34,12 @@ export async function prepareSdk({ sdkRoot, javaBin = '/opt/homebrew/opt/openjdk
   async function call(command, input) {
     try {
       return JSON.parse(await javaProcess(join(javaBin, 'java'),
-        ['-cp', classpath, 'CmsVerifier', sdkRoot, crlDirectory, command], input));
+        ['-cp', classpath, 'CmsVerifier', sdkRoot, crlDirectory,
+          statusSource === 'ocsp' ? `${command}_ocsp` : command], input));
     } catch { throw new Error('verifier_unavailable'); }
   }
   return {
+    statusSource: statusSource === 'ocsp' ? 'test_ocsp' : 'test_crl_fixture',
     inspect: () => call('inspect'),
     verify: (bytes, cms) => call('verify', `${bytes.toString('base64')}\n${cms.toString('base64')}\n`),
     close: () => rm(build, { recursive: true, force: true }),

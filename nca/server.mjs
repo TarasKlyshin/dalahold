@@ -45,6 +45,8 @@ function session(req) {
 }
 
 export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000 }) {
+  const statusSource = sdk.statusSource || 'test_crl_fixture';
+  if (!['test_crl_fixture', 'test_ocsp'].includes(statusSource)) throw new Error('unsupported_test_status_source');
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
   db.exec(`PRAGMA journal_mode = WAL;
@@ -74,7 +76,7 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
 
   async function inspect() {
     const result = await runSdk(() => sdk.inspect());
-    if (result.ready !== true || result.statusSource !== 'test_crl_fixture' ||
+    if (result.ready !== true || result.statusSource !== statusSource ||
         !Number.isSafeInteger(result.validUntil) || result.validUntil <= now() ||
         !Array.isArray(result.chain) || result.chain.length !== 2 ||
         !result.chain.every((item) => typeof item === 'string' && item.startsWith('-----BEGIN CERTIFICATE-----'))) {
@@ -106,12 +108,16 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
     if (row.expires_at <= now()) return { status: 410, error: 'challenge_expired' };
     const bytes = Buffer.from(row.bytes);
     if (hash(bytes) !== row.bytes_hash) return { status: 409, error: 'challenge_changed' };
+    if (JSON.parse(bytes.toString('utf8')).statusSource !== statusSource) {
+      return { status: 409, error: 'status_source_changed' };
+    }
     const outcome = await runSdk(() => sdk.verify(bytes, cms));
     if (outcome.verified !== true) {
       return { status: outcome.error === 'status_unavailable' ? 503 : 422,
         error: outcome.error === 'status_unavailable' ? 'status_unavailable' : 'signature_rejected' };
     }
     if (!/^[a-f0-9]{64}$/.test(outcome.certificateDigest || '') ||
+        outcome.statusSource !== statusSource ||
         !Number.isSafeInteger(outcome.validUntil) || outcome.validUntil <= now()) {
       return { status: 503, error: 'status_unavailable' };
     }
@@ -128,7 +134,7 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
         const receipt = { id: randomUUID(), challengeHash: row.bytes_hash,
           certificateDigest: outcome.certificateDigest, verifiedAt: now(),
           validUntil: outcome.validUntil, scope: 'test_signature_only',
-          statusSource: 'test_crl_fixture' };
+          statusSource };
         commit.run(signatureHash, JSON.stringify(receipt), row.id);
         result = { status: 200, receipt, replay: false };
       }
@@ -185,6 +191,7 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
         const instruction = { domain: 'dalahold:nca-test-probe:v1',
           purpose: 'ПРОВЕРКА ТЕСТОВОЙ ПОДПИСИ. Доступ и платёж не разрешаются.',
           operation: 'test_signature_probe', nonce: id, issuedAt, expiresAt,
+          statusSource,
           sample: { dealId: 'test-livestock-001', version: 1, quantity: 12,
             amountKztForDisplay: 8_400_000, recipient: 'test-buyer' } };
         const bytes = Buffer.from(JSON.stringify(instruction, null, 2) + '\n', 'utf8');
@@ -215,7 +222,7 @@ export function createProbeServer({ dbPath, sdk, now = Date.now, ttlMs = 300_000
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const sdk = await prepareSdk({ sdkRoot: process.env.NCA_SDK_ROOT, javaBin: process.env.NCA_JAVA_BIN,
-      crlDirectory: process.env.NCA_TEST_CRL_DIR });
+      crlDirectory: process.env.NCA_TEST_CRL_DIR, statusSource: process.env.NCA_TEST_STATUS_SOURCE });
     const server = createProbeServer({ dbPath: resolve(directory, '../.local/nca-test.sqlite'), sdk });
     server.listen(4175, '127.0.0.1', () => process.stdout.write('DalaHold test signature: http://127.0.0.1:4175/\n'));
     const stop = () => server.close(async () => { await sdk.close(); process.exit(0); });

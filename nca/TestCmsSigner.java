@@ -62,7 +62,8 @@ public final class TestCmsSigner {
     try { run(args); }
     catch (Exception error) {
       System.out.println("{\"testError\":\"" + phase + "\",\"type\":\"" +
-          error.getClass().getSimpleName() + "\"}");
+          error.getClass().getSimpleName() + "\",\"reason\":\"" +
+          (phase.equals("strict_test_ocsp") ? OcspVerifier.stage : "test_fixture") + "\"}");
     }
   }
 
@@ -101,6 +102,15 @@ public final class TestCmsSigner {
       signed = CMSSignedData.replaceSigners(signed, new SignerInformationStore(List.of(one, one)));
     }
     byte[] cms = signed.getEncoded();
+    if (args[1].equals("ocsp-check")) {
+      phase = "verify_exact_cms";
+      var assets = CmsVerifier.testChain(sdk, new Date());
+      var signer = CmsVerifier.verifiedSigner(cms, bytes, assets, new Date());
+      phase = "strict_test_ocsp";
+      long until = OcspVerifier.online(signer, assets.ca());
+      System.out.println("{\"strictTestOcsp\":true,\"validUntil\":" + until + "}");
+      return;
+    }
     if (args[1].equals("crypto-checks")) {
       CMSUtil.verifyCMS(cms, bytes, CmsVerifier.PROVIDER);
       rejects(() -> CMSUtil.verifyCMS(cms, "altered".getBytes(StandardCharsets.UTF_8), CmsVerifier.PROVIDER));

@@ -10,17 +10,19 @@ import { javaProcess, prepareSdk } from './sdk.mjs';
 const sdkRoot = process.env.NCA_SDK_ROOT;
 const crlDirectory = process.env.NCA_TEST_CRL_DIR;
 const javaBin = process.env.NCA_JAVA_BIN || '/opt/homebrew/opt/openjdk@17/bin';
+const statusSource = process.env.NCA_TEST_STATUS_SOURCE || 'crl';
 
-test('real SDK exact-byte signature checks and status refusal; full HTTP acceptance requires coherent test CRLs',
+test(`real SDK exact-byte signature and HTTP status gates (${statusSource}); not a browser signing test`,
   { skip: !sdkRoot, timeout: 60_000 }, async (t) => {
     const build = await mkdtemp(join(tmpdir(), 'dalahold-nca-sdk-test-'));
     t.after(() => rm(build, { recursive: true, force: true }));
-    const sdk = await prepareSdk({ sdkRoot, javaBin, crlDirectory });
+    const sdk = await prepareSdk({ sdkRoot, javaBin, crlDirectory, statusSource });
     t.after(() => sdk.close());
     const jars = [join(sdkRoot, 'Java/provider/kalkancrypt-0.7.8-current.jar'),
       join(sdkRoot, 'Java/utils/knca_provider_util-0.8.5.jar')].join(delimiter);
     await javaProcess(join(javaBin, 'javac'), ['-encoding', 'UTF-8', '-d', build, '-cp', jars,
       fileURLToPath(new URL('./CmsVerifier.java', import.meta.url)),
+      fileURLToPath(new URL('./OcspVerifier.java', import.meta.url)),
       fileURLToPath(new URL('./SdkProbe.java', import.meta.url)),
       fileURLToPath(new URL('./TestCmsSigner.java', import.meta.url))]);
     const buffer = await readFile(join(sdkRoot, 'Keys and Certs/Gost2015/README.txt'));
@@ -56,8 +58,10 @@ test('real SDK exact-byte signature checks and status refusal; full HTTP accepta
       return;
     }
     assert.equal(health.chain.length, 2);
-    const checks = JSON.parse(await sign(Buffer.from('SDK exact-byte self-check'), 'checks'));
-    assert.deepEqual(checks, { sdkChecks: 6, passed: true });
+    if (statusSource === 'crl') {
+      const checks = JSON.parse(await sign(Buffer.from('SDK exact-byte self-check'), 'checks'));
+      assert.deepEqual(checks, { sdkChecks: 6, passed: true });
+    }
     const server = createProbeServer({ dbPath: join(build, 'probe.sqlite'), sdk });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -94,6 +98,7 @@ test('real SDK exact-byte signature checks and status refusal; full HTTP accepta
     assert.equal(result.receipt.challengeHash, challenge.hash);
     assert.match(result.receipt.certificateDigest, /^[a-f0-9]{64}$/);
     assert.equal(result.receipt.scope, 'test_signature_only');
+    assert.equal(result.receipt.statusSource, statusSource === 'ocsp' ? 'test_ocsp' : 'test_crl_fixture');
     const retry = await post('/api/verify', { challengeId: challenge.id, cms });
     assert.deepEqual((await retry.json()).receipt, result.receipt);
   });

@@ -68,11 +68,12 @@ if (typeof document !== 'undefined') {
     invalid_ncalayer_response: 'NCALayer вернул неподдерживаемый ответ. Проверка не выполнена.',
     signature_rejected: 'Подпись отклонена: данные, назначение сертификата или тестовая цепочка не прошли проверку.',
     challenge_expired: 'Распоряжение истекло. Создай новое и подпиши его.',
-    status_unavailable: 'Тестовые CRL отсутствуют, истекли или несовместимы. Сервер не может подтвердить статус сертификата.',
+    status_unavailable: 'Сервер не может подтвердить статус сертификата: источник отсутствует, устарел или не прошёл проверку. Обнови страницу после восстановления проверки.',
     crl_pair_mismatch: 'Базовый CRL и delta-CRL из SDK несовместимы. Нужна согласованная пара от НУЦ; до этого подписание на стенде закрыто.',
     verifier_unavailable: 'Проверка SDK недоступна. Повтори после восстановления сервера.',
     verifier_busy: 'Сервер уже выполняет проверку. Повтори через несколько секунд.',
     replay_conflict: 'Этот запрос уже погашен другой подписью. Нового результата не создано.',
+    status_source_changed: 'Режим проверки статуса сменился. Создай и подпиши новое распоряжение.',
     network_error: 'Локальный сервер недоступен. При повторной отправке результат будет получен только один раз.',
   };
   function log(code) {
@@ -130,7 +131,7 @@ if (typeof document !== 'undefined') {
     }
   }
   async function submit(operation) {
-    message('Сервер проверяет точные байты, сертификат и тестовые CRL…');
+    message('Сервер проверяет точные байты, сертификат и выбранный источник статуса…');
     const result = await api('/api/verify', { challengeId: challenge.id, cms });
     if (operation !== currentOperation) return;
     log(result.replay ? 'historical_receipt' : 'test_signature_verified');
@@ -140,7 +141,9 @@ if (typeof document !== 'undefined') {
     $('receipt').hidden = false;
     $('receiptId').textContent = result.receipt.id;
     $('receiptHash').textContent = result.receipt.challengeHash;
-    $('receiptScope').textContent = 'Локальные тестовые CRL · проверка тестовой подписи';
+    $('receiptScope').textContent = result.receipt.statusSource === 'test_ocsp'
+      ? 'Тестовый OCSP НУЦ · проверка тестовой подписи'
+      : 'Локальные тестовые CRL · проверка тестовой подписи';
     $('sign').hidden = true;
   }
   $('connect').addEventListener('click', () => action(async () => {
@@ -194,7 +197,11 @@ if (typeof document !== 'undefined') {
   setInterval(controls, 1000);
   action(async () => {
     ready = await api('/api/status');
-    $('sdk').textContent = `SDK готов · тестовые CRL до ${new Date(ready.validUntil).toLocaleString('ru-RU')}`;
-    message('Сервер готов. Проверь NCALayer и создай тестовое распоряжение.');
+    $('sdk').textContent = ready.statusSource === 'test_ocsp'
+      ? 'SDK: тестовая цепочка готова · OCSP проверяется после получения подписи'
+      : `SDK готов · тестовые CRL до ${new Date(ready.validUntil).toLocaleString('ru-RU')}`;
+    message(ready.statusSource === 'test_ocsp'
+      ? 'Тестовый OCSP-режим. Статус конкретного сертификата пока не проверен. Проверь NCALayer и создай распоряжение.'
+      : 'Сервер готов. Проверь NCALayer и создай тестовое распоряжение.');
   });
 }

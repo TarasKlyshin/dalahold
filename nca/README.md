@@ -9,7 +9,22 @@ with one-time consumption. An identical retry returns the historical receipt;
 it does not perform a new authorization or status check. No owner, deal,
 corporate permission, Solana grant or payment is created.
 
-**Status acceptance is BLOCKED.** The SDK's base CRL has number **166**, while
+**Strict TEST OCSP now passes SDK-to-HTTP acceptance** using the official
+`http://test.pki.gov.kz/ocsp/` endpoint and a bundled test certificate. This is
+a separate explicit mode (`NCA_TEST_STATUS_SOURCE=ocsp`), never an automatic
+fallback. The default CRL mode remains closed for the incompatible bundle.
+The adapter pins the local approved TEST CA snapshot, checks the CMS first,
+then verifies responder ID/trust/purpose/signature, exact CertID, a random
+32-byte nonce echo and bounded freshness. Delegated responders without a
+valid OCSP noCheck extension refuse. Unknown, revoked, malformed, weakly
+signed, stale and unavailable responses refuse. Redirects, wrong MIME,
+oversized bodies and timeouts refuse; no certificate-supplied URL is used.
+Status expires within five minutes and is rechecked at receipt commit.
+The instruction and receipt bind the selected status source; switching mode
+requires a new instruction. A ready page means **local trust/config ready**,
+not that a particular certificate has a verified status.
+
+**CRL-mode acceptance is BLOCKED.** The SDK's base CRL has number **166**, while
 its delta CRL has number **2228** and BaseCRLNumber **167**. On 30 September,
 the public official test endpoints returned the same numbers and publication
 times (11 August 2026). The complete CRL must be at least the delta's
@@ -20,10 +35,15 @@ relationship; its earlier status acceptance does not establish coherent
 revocation coverage. The probe now invokes the common pair guard and rejects
 this bundle. Do not edit CRL numbers, ignore the delta, or disable the guard.
 
-The installed NCALayer's TLS connection was also tested through the browser.
-Its CMS output is still untested: no certificate selection or signing dialog
-was completed. Current tests prove SDK exact-byte cryptography and refusal of
-the incompatible status fixtures; they do not prove a complete NCALayer flow.
+The browser connected to NCALayer without a TLS bypass and issued exact
+OCSP-bound instructions. A signing request returned an unsupported response;
+no usable CMS, completed certificate selection or browser receipt was observed.
+The Java app window could not be controlled by the available UI connector.
+The browser refuses that result and re-enables controls without a receipt.
+Compatibility diagnosis and supervised test-certificate selection remain open.
+Responsive checks at 375/768/1440 found no horizontal overflow; keyboard focus,
+status live-region and control states were inspected, with no captured console
+errors. Web Vitals and a real file-download result were not measured.
 
 An isolated diagnostic also queried **TEST** OCSP for a bundled test
 certificate. The SDK utility returned `good`, but bytecode inspection of
@@ -33,10 +53,16 @@ responder authorization; it returns the first status without matching its
 CertID to the request or checking freshness. A nonce is compared only when
 the response contains one. `TestCmsSigner` labels this diagnostic
 `authorizationUsable: false`; it is never called by the server. No automatic
-OCSP fallback is enabled. A strict adapter must validate pinned issuer or
-authorized responder trust/purpose, response binding, freshness, nonce policy,
-critical extensions and unavailable/unknown/revoked responses before it can
-replace the CRL gate.
+OCSP fallback is enabled. The separate adapter above now validates these
+conditions; it does not call that utility for acceptance.
+
+Current verification: 83 Node cases + 7 offline Solana cases; 3 additional SDK
+runs (default CRL refusal, 47 signed synthetic/transport checks, live TEST OCSP
+CMS-to-HTTP acceptance). Synthetic revoked/delegated responders establish
+policy behavior, not coverage of genuine official revoked/wrong-purpose
+certificates. Official rules, archive provenance, stable identity, powers,
+rotation and independent review remain unaccepted. Claude Opus 5.5/max's
+read-only review timed out after 240 seconds with no findings.
 
 ## Start and check
 
@@ -47,10 +73,13 @@ From the project root, use the SDK directory containing `Java/` and
 export NCA_SDK_ROOT='/path/to/SDK 2.0'
 export NCA_JAVA_BIN='/opt/homebrew/opt/openjdk@17/bin'
 node nca/server.mjs
+
+# Explicit separate TEST OCSP mode (not a CRL fallback):
+NCA_TEST_STATUS_SOURCE=ocsp node nca/server.mjs
 ```
 
-The server binds only `127.0.0.1:4175`. The current bundle shows a clear
-status error and disables instruction issuance. Public assets, purpose,
+The server binds only `127.0.0.1:4175`. In default CRL mode the current bundle
+shows a clear status error and disables instruction issuance. Public assets, purpose,
 certificates, CRL signatures, freshness, base/delta relationship and scope are
 checked before a test signature can be accepted. Session-bound API writes
 require the exact local Origin; no keys/passwords enter the API. CMS exists
@@ -74,11 +103,13 @@ HTTP-delivered CRLs must come from their verified CA signature. If a coherent
 pair passes all checks, the script prints `NCA_TEST_CRL_DIR` for a new ignored
 `.local/nca-test-crls-*` directory. Set that variable, restart the server and
 run the tests. At present the refresh also rejects the incompatible pair;
-request a coherent current base/delta pair from NCA before signing on this stand.
+request a coherent current base/delta pair from NCA before CRL-mode acceptance.
 
 ```sh
 node --test nca/server.test.mjs nca/client.test.mjs
 NCA_SDK_ROOT='/path/to/SDK 2.0' node --test nca/sdk.test.mjs
+NCA_SDK_ROOT='/path/to/SDK 2.0' node --test nca/ocsp.test.mjs
+NCA_SDK_ROOT='/path/to/SDK 2.0' NCA_TEST_STATUS_SOURCE=ocsp node --test nca/sdk.test.mjs
 ```
 
 The first command uses injected callbacks for HTTP/replay tests only. The
@@ -87,13 +118,18 @@ the SDK's test README into stdin, never argv/env/logs. It always checks
 exact-byte cryptography and the current bundle's status rejection. If an
 explicit `NCA_TEST_CRL_DIR` supplies a coherent pair, it additionally runs the
 full SDK-to-HTTP acceptance/tampering/attached/multiple/expired CMS checks.
-Those conditional checks are **not passed** while the status gate is closed.
+Those CRL-mode conditional checks are **not passed** while its gate is closed.
+The fourth command runs actual detached CMS/tampering/attached/multiple/expired
+CMS and historical retry checks through strict TEST OCSP and the HTTP API;
+it is not a NCALayer browser test. The third generates ephemeral synthetic
+RSA fixtures, saving public test certificates only for the pin-negative test;
+private keys remain in memory. No official assets are replaced.
 No separate authentication-only certificate was found in the current
 individual test bundle; wrong-purpose and genuinely revoked-certificate
 acceptance tests still require suitable fixtures. Unit callbacks are not a
 substitute for those fixtures.
 
-After the CRL gate passes: create a new instruction → review its exact text →
+In explicit OCSP mode, or after the CRL gate passes: create a new instruction → review its exact text →
 sign with the current SDK individual test P12 in NCALayer → observe the test
 receipt → resend and observe the same historical receipt. The browser uses
 an explicit test CA chain and never an empty chain. Password entry belongs
@@ -119,7 +155,7 @@ NCA_JAVA_BIN='/opt/homebrew/opt/openjdk@17/bin'
 NCA_TEST_P12=$(find "$NCA_SDK_ROOT/Keys and Certs/Gost2015/2026.05.08-2027.05.07" -type f -name '*.p12' -print -quit)
 NCA_PROBE_BUILD=$(mktemp -d)
 NCA_PROBE_CP="$NCA_SDK_ROOT/Java/provider/kalkancrypt-0.7.8-current.jar:$NCA_SDK_ROOT/Java/utils/knca_provider_util-0.8.5.jar"
-"$NCA_JAVA_BIN/javac" -d "$NCA_PROBE_BUILD" -cp "$NCA_PROBE_CP" nca/SdkProbe.java nca/CmsVerifier.java
+"$NCA_JAVA_BIN/javac" -d "$NCA_PROBE_BUILD" -cp "$NCA_PROBE_CP" nca/SdkProbe.java nca/CmsVerifier.java nca/OcspVerifier.java
 "$NCA_JAVA_BIN/java" -cp "$NCA_PROBE_BUILD:$NCA_PROBE_CP" SdkProbe "$NCA_SDK_ROOT" "$NCA_TEST_P12"
 ```
 

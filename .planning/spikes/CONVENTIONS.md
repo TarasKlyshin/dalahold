@@ -17,3 +17,8 @@ The first experiment does not establish a production stack or reusable applicati
   server. CRL signature and expiry alone are insufficient: base/delta numbers
   and scope must agree. `.local/` is ignored; downloaded SDK/private keys are
   never copied into Git. A failed status fixture blocks test receipt issuance.
+- Strict TEST OCSP is an explicit separate mode, never an automatic fallback
+  after a CRL failure. Source is bound into the exact instruction and receipt;
+  the ready page covers local CA trust only. Good status requires trusted
+  responder/signature, exact CertID/nonce and fresh time at verification/commit.
+  HTTP transport never grants trust on its own. Unknown/unavailable refuses.
