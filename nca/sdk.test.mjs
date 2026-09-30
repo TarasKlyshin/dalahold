@@ -3,6 +3,7 @@ import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { createProbeServer } from './server.mjs';
 import { javaProcess, prepareSdk } from './sdk.mjs';
@@ -35,6 +36,9 @@ test(`real SDK exact-byte signature and HTTP status gates (${statusSource}); not
     const sign = async (bytes, mode = 'sign') => (await javaProcess(join(javaBin, 'java'),
       ['-cp', [build, jars].join(delimiter), 'TestCmsSigner', sdkRoot, mode, crlDirectory],
       `${password}\n${bytes.toString('base64')}\n`)).trim();
+    assert.deepEqual(JSON.parse(await sign(Buffer.from('unknown fixture must not sign'), 'unsupported-fixture')), {
+      testError: 'input', type: 'IllegalArgumentException', reason: 'test_fixture',
+    });
     const health = await sdk.inspect();
     const bundled = await prepareSdk({ sdkRoot, javaBin });
     try { assert.equal((await bundled.inspect()).error, 'status_unavailable'); }
@@ -84,12 +88,32 @@ test(`real SDK exact-byte signature and HTTP status gates (${statusSource}); not
       const response = await post('/api/verify', { challengeId: challenge.id, cms });
       assert.equal(response.status, 422, `mode ${mode} did not reach SDK rejection`);
     }
-    const auth = await sign(bytes, 'auth');
-    if (auth.startsWith('{')) {
-      assert.equal(JSON.parse(auth).testError, 'load_test_key');
-      t.diagnostic('No separate authentication-only key in current individual test bundle; wrong-purpose certificate acceptance remains open.');
-    } else {
-      assert.equal((await post('/api/verify', { challengeId: challenge.id, cms: auth })).status, 422);
+    if (statusSource === 'ocsp') {
+      assert.deepEqual(JSON.parse(await sign(bytes, 'wrong-purpose-checks')), {
+        wrongPurposeFixture: true, issuerSignature: true, currentlyValid: true,
+        exactCms: true, missingSigningEku: true,
+      });
+      for (const [mode, error, reason, status] of [
+        ['wrong-purpose', 'signature_rejected', 'cms', 422],
+        ['revoked', 'status_unavailable', 'ocsp_status_revoked', 503],
+      ]) {
+        const cms = await sign(bytes, mode);
+        assert.ok(!cms.startsWith('{'), `${mode} fixture could not sign`);
+        const outcome = await sdk.verify(bytes, Buffer.from(cms, 'base64'));
+        assert.equal(outcome.verified, false, `${mode} did not refuse`);
+        assert.equal(outcome.error, error);
+        assert.equal(outcome.reason, reason);
+        const rejected = await post('/api/verify', { challengeId: challenge.id, cms });
+        assert.equal(rejected.status, status);
+        assert.deepEqual(await rejected.json(), { error });
+        const db = new DatabaseSync(join(build, 'probe.sqlite'), { readOnly: true });
+        try {
+          const row = db.prepare('SELECT signature_hash, receipt_json FROM nca_test_challenges WHERE id = ?').get(challenge.id);
+          assert.equal(row.signature_hash, null);
+          assert.equal(row.receipt_json, null);
+        } finally { db.close(); }
+        t.diagnostic(`Bundled ${mode} fixture refused by Java and HTTP; challenge remains unconsumed.`);
+      }
     }
     // SDK-created CMS through Kalkan's actual PEM writer and the browser
     // normalizer. This is not an observed desktop NCALayer signing roundtrip.

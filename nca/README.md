@@ -9,7 +9,7 @@ with one-time consumption. An identical retry returns the historical receipt;
 it does not perform a new authorization or status check. No owner, deal,
 corporate permission, Solana grant or payment is created.
 
-**Strict TEST OCSP now passes SDK-to-HTTP acceptance** using the official
+**Strict TEST OCSP passes SDK-to-HTTP and supervised NCALayer browser acceptance** using the official
 `http://test.pki.gov.kz/ocsp/` endpoint and a bundled test certificate. This is
 a separate explicit mode (`NCA_TEST_STATUS_SOURCE=ocsp`), never an automatic
 fallback. The default CRL mode remains closed for the incompatible bundle.
@@ -35,12 +35,14 @@ relationship; its earlier status acceptance does not establish coherent
 revocation coverage. The probe now invokes the common pair guard and rejects
 this bundle. Do not edit CRL numbers, ignore the delta, or disable the guard.
 
-The browser connected to NCALayer without a TLS bypass and issued exact
-OCSP-bound instructions. An earlier request returned an unsupported response.
-The user's later Chrome journal records a signature container followed by
-HTTP format rejection; the CMS PEM transport correction below fixes that
-boundary. No browser test receipt is yet verified. The Java app window cannot
-be controlled by the available UI connector; supervised retest remains open.
+The user completed the NCALayer dialog in Chrome without a TLS bypass and
+obtained a verified test receipt, then the identical historical receipt on
+retry. Browser journal, server events and persisted SQLite digests agree.
+The accepted certificate matches the bundled legal-entity **employee with
+signing rights** test profile. That profile is not proof of corporate powers.
+The earlier CMS PEM/base64 transport failure is fixed; see the dated evidence
+below. The Java app window is not controlled by the UI connector; the user
+selected the bundled test key and entered its password only in NCALayer.
 Responsive checks at 375/768/1440 found no horizontal overflow; keyboard focus,
 status live-region and control states were inspected, with no captured console
 errors. Web Vitals and a real file-download result were not measured.
@@ -58,11 +60,16 @@ conditions; it does not call that utility for acceptance.
 
 Current verification: 88 Node cases + 7 offline Solana cases; 3 additional SDK
 runs (default CRL refusal, 47 signed synthetic/transport checks, live TEST OCSP
-CMS-to-HTTP acceptance). Synthetic revoked/delegated responders establish
-policy behavior, not coverage of genuine official revoked/wrong-purpose
-certificates. Official rules, archive provenance, stable identity, powers,
+CMS-to-HTTP acceptance including genuine bundled revoked/wrong-purpose
+certificate refusals). Synthetic responses separately establish policy and
+transport behavior. The genuine revoked fixture returns trusted, bound, fresh
+TEST OCSP `revoked`; the wrong-purpose fixture is refused before status lookup.
+Official rules, archive provenance, stable identity, powers,
 rotation and independent review remain unaccepted. Claude Opus 5.5/max's
 read-only review timed out after 240 seconds with no findings.
+
+The continuation sections below are a chronological trail: their pending
+browser/fixture statements describe those earlier checkpoints, not current status.
 
 ### Client continuation, 30 September 2026
 
@@ -113,6 +120,60 @@ one-use HTTP receipt/retry; it is not a completed desktop NCALayer dialog.
 All 95 local cases and the 3 SDK runs pass. Browser receipt acceptance for the
 user's legal-entity certificate still requires a supervised retest; certificate
 validity/status and corporate powers are not inferred from `cms_received`.
+
+### Official fixture negatives and supervised UAT, 30 September 2026
+
+Negative-fixture baseline: local `main` at
+`38801b38ec230f7afee52aaf731759822649ef6b`; no push or deployment in this step.
+No new dependency, service, private document or personal key was introduced.
+
+- Manual NCALayer success: `test_signature_verified` at `2026-09-30T09:29:46Z`
+  (14:29:46 Almaty); retry: `historical_receipt` at `2026-09-30T09:33:21Z`.
+  Receipt ID `290ec6f5-7b71-4633-8ac4-b7f4f2f74517`, exact challenge SHA-256
+  `d33c57818f48ffa84d3d59f883b8586f19e39d2b6f93deaabddb671f0e9682fd`,
+  original `verifiedAt: 2026-09-30T09:29:46.079Z`,
+  `scope: test_signature_only`, `statusSource: test_ocsp`.
+  The retry preserved all these fields and did not check status again.
+  The stored certificate digest matches exactly one of 12 current bundled
+  profiles: `Юридическое лицо/Сотрудник с правом подписи/valid`.
+  No certificate subject, serial, CMS or private key is included in this record.
+- Genuine revoked fixture: current `Физическое лицо/revoked`. Its exact detached
+  CMS, purpose, validity and pinned TEST CA signature pass before OCSP. The
+  verified TEST response then reports `revoked`: internal safe reason
+  `ocsp_status_revoked`, public `status_unavailable` / HTTP 503. This is not
+  merely a timeout or an unknown-status failure.
+- Genuine wrong-purpose fixture: current legal-entity `Казначейство клиент/valid`.
+  The certificate is currently valid, has signing key usage, is signed by the
+  approved TEST CA and creates cryptographically valid exact CMS, but lacks
+  the stand's required signing EKU `1.3.6.1.5.5.7.3.4`:
+  [official KNCA Basics purpose definitions](https://github.com/pkigovkz/sdkinfo/wiki/KNCA-Basics-Module).
+  It is not called an invalid certificate globally or an authentication-only
+  certificate. Java returns `signature_rejected` / reason `cms`; HTTP returns 422.
+- After each genuine negative, SQLite contains neither a signature digest nor
+  a receipt. The same unconsumed challenge subsequently accepts one eligible
+  signature and returns the same historical receipt on retry. Fixture selection
+  now explicitly chooses `valid`, `revoked` or wrong-purpose material; an
+  unsupported mode cannot silently select a valid key.
+- Safe internal OCSP reasons distinguish trusted revoked and unknown responses
+  only after trust, CertID, nonce and freshness checks. Acceptance remains
+  **good-only**, public errors remain generic, and default CRL mode is unchanged.
+- Regressions failed before the selector/diagnostic changes and pass after them.
+  Stable suite: 88 Node + 7 offline Solana cases and all 3 SDK runs, including
+  47 synthetic/transport checks, default CRL refusal and live TEST OCSP acceptance
+  with the genuine negative fixtures. No skipped SDK cases in these runs.
+- The local stand was gracefully restarted with the same explicit TEST OCSP
+  configuration to load the updated Java verifier. HTTP 200 and local trust/config
+  readiness pass; the saved UAT receipt, challenge hash, signature digest and
+  original verification time match the pre-restart SQLite backup exactly.
+  Backup: ignored `.local/nca-before-negative-fixtures-pMxS9g/nca-test.sqlite`.
+  This readiness check performs no new signing, certificate-status authorization
+  or business operation; a fresh manual dialog was not repeated in this step.
+
+This completes the test-signature browser/retry and genuine negative-fixture
+gate only. Next is a reviewed stable-identity mapping and a same-identity
+certificate-replacement test; corporate powers, business grants, signed deals,
+wallet ownership and devnet remain unconnected. Independent security review,
+official validation rules and SDK provenance remain open.
 
 ## Start and check
 
@@ -169,15 +230,15 @@ exact-byte cryptography and the current bundle's status rejection. If an
 explicit `NCA_TEST_CRL_DIR` supplies a coherent pair, it additionally runs the
 full SDK-to-HTTP acceptance/tampering/attached/multiple/expired CMS checks.
 Those CRL-mode conditional checks are **not passed** while its gate is closed.
-The fourth command runs actual detached CMS/tampering/attached/multiple/expired
-CMS and historical retry checks through strict TEST OCSP and the HTTP API;
+The fourth command runs actual detached CMS/tampering/attached/multiple/expired,
+genuine revoked/wrong-purpose CMS and historical retry checks through strict TEST OCSP and the HTTP API;
 it is not a NCALayer browser test. The third generates ephemeral synthetic
 RSA fixtures, saving public test certificates only for the pin-negative test;
 private keys remain in memory. No official assets are replaced.
-No separate authentication-only certificate was found in the current
-individual test bundle; wrong-purpose and genuinely revoked-certificate
-acceptance tests still require suitable fixtures. Unit callbacks are not a
-substitute for those fixtures.
+The current individual `revoked` and legal-entity Treasury `valid` certificates
+provide mandatory genuine negative fixtures in explicit OCSP mode; their
+properties and refusal/no-consumption results are documented above. They are
+separate from the signed synthetic OCSP cases and injected HTTP callbacks.
 
 In explicit OCSP mode, or after the CRL gate passes: create a new instruction → review its exact text →
 sign with the current SDK individual test P12 in NCALayer → observe the test

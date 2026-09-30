@@ -109,6 +109,9 @@ public final class OcspVerifierTest {
     boolean rejected = false;
     try { action.run(); } catch (Exception expected) { rejected = true; }
     if (!rejected) throw new IllegalStateException("negative fixture accepted");
+    if (name.equals("revoked") || name.equals("unknown")) {
+      CmsVerifier.check(OcspVerifier.stage.equals("ocsp_status_" + name));
+    }
     checks++;
   }
 

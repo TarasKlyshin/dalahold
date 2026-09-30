@@ -27,11 +27,14 @@ import kz.gov.pki.reference.KNCAServiceRequestMethod;
 public final class TestCmsSigner {
   static String phase = "input";
   static SigningEntity entity(Path sdk, char[] password, String mode) throws Exception {
-    boolean auth = mode.equals("auth");
+    boolean wrongPurpose = mode.equals("wrong-purpose") || mode.equals("wrong-purpose-checks");
     String period = mode.equals("expired") ? "2024.10.29-2025.10.29" : "2026.05.08-2027.05.07";
-    Path directory = sdk.resolve("Keys and Certs/Gost2015/" + period + "/Физическое лицо");
+    Path directory = sdk.resolve("Keys and Certs/Gost2015/" + period);
+    if (!wrongPurpose) directory = directory.resolve("Физическое лицо").resolve(
+        mode.equals("expired") ? "Valid" : mode.equals("revoked") ? "revoked" : "valid");
     try (var files = Files.walk(directory)) {
-      for (Path file : files.filter(path -> path.toString().endsWith(".p12")).toList()) {
+      for (Path file : files.filter(path -> path.toString().endsWith(".p12")).sorted().toList()) {
+        if (wrongPurpose && !file.getParent().getFileName().toString().equalsIgnoreCase("valid")) continue;
         CmsVerifier.check(file.toRealPath().startsWith(directory.toRealPath()));
         var store = KeyStore.getInstance("PKCS12", CmsVerifier.PROVIDER);
         try (var input = Files.newInputStream(file)) { store.load(input, password); }
@@ -41,7 +44,7 @@ public final class TestCmsSigner {
           var certificate = (X509Certificate) store.getCertificate(alias);
           var eku = certificate.getExtendedKeyUsage();
           boolean signing = eku != null && eku.contains(CmsVerifier.SIGNING_EKU);
-          if (auth == signing) continue;
+          if (wrongPurpose == signing) continue;
           var chain = new ArrayList<X509Certificate>();
           for (var cert : store.getCertificateChain(alias)) chain.add((X509Certificate) cert);
           return new SigningEntity((PrivateKey) store.getKey(alias, password), chain);
@@ -69,6 +72,9 @@ public final class TestCmsSigner {
 
   static void run(String[] args) throws Exception {
     CmsVerifier.check(args.length == 3);
+    CmsVerifier.check(List.of("sign", "pem", "attached", "multi", "expired", "revoked",
+        "wrong-purpose", "wrong-purpose-checks", "crypto-checks", "checks",
+        "ocsp-diagnostic", "ocsp-check").contains(args[1]));
     Path sdk = Path.of(args[0]);
     var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
     char[] password = input.readLine().toCharArray();
@@ -102,6 +108,31 @@ public final class TestCmsSigner {
       signed = CMSSignedData.replaceSigners(signed, new SignerInformationStore(List.of(one, one)));
     }
     byte[] cms = signed.getEncoded();
+    if (args[1].startsWith("wrong-purpose")) {
+      // Non-vacuous fixture: valid CA-issued certificate and exact CMS, but
+      // missing this stand's required signing EKU. Never synthesize a cert.
+      phase = "wrong_purpose_fixture";
+      var certificate = signing.getCertificateChain().get(0);
+      var assets = CmsVerifier.testChain(sdk, new Date());
+      certificate.checkValidity();
+      CmsVerifier.check(certificate.getIssuerX500Principal().equals(assets.ca().getSubjectX500Principal()));
+      CmsVerifier.check(certificate.getBasicConstraints() < 0);
+      var usage = certificate.getKeyUsage();
+      CmsVerifier.check(usage != null && usage.length > 1 && (usage[0] || usage[1]));
+      CmsVerifier.check(certificate.getExtendedKeyUsage() != null &&
+          !certificate.getExtendedKeyUsage().contains(CmsVerifier.SIGNING_EKU));
+      CmsVerifier.checkSignature(certificate.getSigAlgName(), assets.ca().getPublicKey(),
+          certificate.getTBSCertificate(), certificate.getSignature());
+      CMSUtil.verifyCMS(cms, bytes, CmsVerifier.PROVIDER);
+      if (args[1].equals("wrong-purpose-checks")) {
+        System.out.println("{\"wrongPurposeFixture\":true,\"issuerSignature\":true,\"currentlyValid\":true,\"exactCms\":true,\"missingSigningEku\":true}");
+        return;
+      }
+    }
+    if (args[1].equals("revoked")) {
+      phase = "revoked_fixture_crypto";
+      CmsVerifier.verifiedSigner(cms, bytes, CmsVerifier.testChain(sdk, new Date()), new Date());
+    }
     if (args[1].equals("pem")) {
       // Same Kalkan PEMWriter used by installed NCALayer Basics; test output
       // is captured in memory, never written to logs or fixture files.

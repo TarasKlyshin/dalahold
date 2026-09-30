@@ -71,7 +71,7 @@ The default `node --test nca/sdk.test.mjs` still verifies CRL-mode refusal.
 SDK/JAR/test P12/password/CRL remain outside Git; shared bundled test password
 is read into stdin only. No personal key is required or accessed.
 
-## Results
+## Initial results (historical checkpoint)
 
 **CODE / TESTED locally; no deployment or full browser acceptance.**
 
@@ -102,7 +102,7 @@ is read into stdin only. No personal key is required or accessed.
   were inspected; captured warn/error logs were empty. Web Vitals, real JSON
   download and natural-user acceptance were not measured.
 
-Next safe gate: diagnose the installed NCALayer response without raw CMS or
+Next safe gate at that checkpoint: diagnose the installed NCALayer response without raw CMS or
 personal data logging, complete supervised bundled-test-certificate selection,
 then verify a browser receipt/retry. Independent security review, genuine
 wrong-purpose/revoked and same-identity replacement fixtures, official rules,
@@ -146,3 +146,41 @@ stand to `authority/`, deal decisions or devnet until their gates are verified.
   the client parser and strict TEST OCSP, not a desktop signing dialog.
 - Browser receipt for the user's legal-entity test certificate and corporate
   powers are still unaccepted. Reload and supervised signing retest are needed.
+
+## Supervised UAT and genuine negative fixtures from local 38801b3
+
+**CODE / TESTED / local browser UAT for `test_signature_only`; no business or
+production acceptance.** The previous pending NCALayer and genuine negative
+fixture gates above are now closed for this test stand. Verdict remains PARTIAL.
+
+- User-operated NCALayer in Chrome produced a server-verified test receipt at
+  `2026-09-30T09:29:46Z`; the retry at `2026-09-30T09:33:21Z` returned the same
+  persisted receipt without new consumption or status lookup. Browser journal,
+  server events and SQLite digest fields agree; exact receipt/hash evidence is
+  in [the stand record](../../../nca/README.md#official-fixture-negatives-and-supervised-uat-30-september-2026).
+  Its certificate digest matches the bundled legal-entity employee-with-signing-
+  rights profile. Certificate purpose does not establish corporate powers.
+- Current SDK individual `revoked` fixture passes exact CMS/CA/purpose/validity
+  checks, then a trusted, CertID/nonce-bound and fresh TEST OCSP response reports
+  `revoked`. Java reports safe `ocsp_status_revoked`; HTTP refuses with generic
+  `status_unavailable` / 503. A transport failure cannot satisfy this assertion.
+- Current SDK Treasury `valid` fixture passes CA signature, current validity,
+  signing key usage and exact CMS crypto, but lacks the stand's required signing
+  EKU. Java refuses before OCSP; HTTP returns `signature_rejected` / 422.
+  This is wrong purpose **for this stand**, not a claim that the certificate is
+  globally invalid or authentication-only.
+- Both genuine negatives leave `signature_hash` and `receipt_json` null in
+  SQLite. One eligible signature can still consume that same challenge once,
+  followed by a historical retry. Fixtures are mandatory, not optional/vacuous.
+  Test-key selection explicitly restricts `valid`/`revoked` directories and
+  refuses unknown modes. No raw CMS, subject, serial, password or private key
+  enters artifacts; only bundled SDK test keys are accessed locally.
+- Regressions failed before selector/safe-stage fixes, then passed. 88 Node +
+  7 offline Solana cases, plus all 3 SDK runs (47 signed synthetic/transport
+  checks, default CRL refusal, live TEST OCSP including genuine negatives), pass
+  without skipped SDK cases. No new dependencies or weaker acceptance policy.
+
+Next safe gate: reviewed stable-identity mapping and suitable same-identity
+replacement certificates. Verified corporate powers, official rules, SDK
+provenance and independent security review remain open. Do not interpret this
+receipt as an owner binding, wallet, deal decision, Solana grant or payment.

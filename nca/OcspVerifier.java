@@ -22,6 +22,8 @@ import kz.gov.pki.kalkan.ocsp.CertificateID;
 import kz.gov.pki.kalkan.ocsp.OCSPReqGenerator;
 import kz.gov.pki.kalkan.ocsp.OCSPResp;
 import kz.gov.pki.kalkan.ocsp.RespID;
+import kz.gov.pki.kalkan.ocsp.RevokedStatus;
+import kz.gov.pki.kalkan.ocsp.UnknownStatus;
 
 public final class OcspVerifier {
   static final String NONCE = "1.3.6.1.5.5.7.48.1.2";
@@ -131,8 +133,10 @@ public final class OcspVerifier {
       until = Math.min(until, next);
     }
     check(until > current);
-    stage = "ocsp_status";
-    check(answers[0].getCertStatus() == null); // only GOOD; revoked/unknown refuse
+    var status = answers[0].getCertStatus();
+    stage = status instanceof RevokedStatus ? "ocsp_status_revoked" :
+        status instanceof UnknownStatus ? "ocsp_status_unknown" : "ocsp_status";
+    check(status == null); // only GOOD; revoked/unknown refuse
     return Math.min(until, current + MAX_AGE);
   }
 

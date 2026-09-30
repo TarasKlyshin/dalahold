@@ -50,10 +50,12 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
   are tested. In explicit TEST OCSP mode, strict responder trust/CertID/nonce/
   freshness checks now pass SDK-generated CMS → one-use HTTP test receipt.
   Incompatible base/delta CRLs still close default CRL mode, without fallback.
-  The user's browser received a signature container but HTTP rejected its
-  format. CMS PEM normalization is now SDK/HTTP-tested; a browser receipt
-  has not passed acceptance. Independent
-  review, identity/powers and official negative fixtures remain open.
+  CMS PEM normalization is SDK/HTTP-tested. The user's supervised NCALayer
+  signing and historical retry now match browser/server/SQLite records;
+  the bundled legal-entity signing-profile receipt is test-signature-only.
+  Genuine bundled revoked and wrong-purpose certificates refuse without a
+  receipt or consumption. Independent review, official rules/provenance,
+  stable identity, certificate rotation and corporate powers remain open.
 
 ## Build status
 
@@ -65,18 +67,19 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 | 3a. Offline deal decisions | complete as a test policy and durable ledger; not in browser | Ordered actor/terms-bound decisions, replay and altered-request rejection, dispute stop, restart and cross-deal checks |
 | 3b. Signed-byte handoff | complete as an offline fixture; not in browser | Exact persisted challenge over server-read unsigned terms, test signature/powers, stale/expired/replay/dispute checks |
 | 3c. Immutable local terms and demo record | complete as an offline fixture; not in browser | Full bound terms persist, pre-offer refresh and post-offer freeze, same-file transactional draft check, version-filtered metadata, fail-closed receipt record |
-| 4. NCA verifier and NCALayer | Strict explicit TEST OCSP passes SDK-to-HTTP test acceptance; default CRL mode remains blocked | Actual NCALayer CMS roundtrip, independent review, identity/powers and official negative/rotation fixtures still open |
+| 4. NCA verifier and NCALayer | Strict explicit TEST OCSP passes SDK/NCALayer browser test receipt/retry and genuine revoked/wrong-purpose refusal; default CRL mode remains blocked | Test-signature-only; independent review, rules/provenance, stable identity, powers and same-identity replacement/rotation still open |
 | 5. Devnet acceptance | pending | Confirmed exact test transfer and all required negative cases; no real KZT |
 
 `mvp_complete: false`
 
-`tests_passing: true` (88 Node + 7 offline Solana cases, plus 3 SDK runs including 47 synthetic/transport checks, CRL refusal and live Kalkan PEM/client-normalized TEST OCSP HTTP acceptance, as of 2026-09-30; not NCALayer end-to-end acceptance)
+`tests_passing: true` (88 Node + 7 offline Solana cases, plus 3 SDK runs including 47 synthetic/transport checks, CRL refusal and live TEST OCSP HTTP acceptance/genuine negatives, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed, not owner/business-grant or devnet acceptance)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)
 
 The master plan and acceptance criteria remain in `IMPLEMENTATION_PLAN.md` and
 `TECHNICAL_PROTOTYPE.md`; this file does not supersede them.
+The dated handoffs below preserve earlier checkpoints, not current gate status.
 
 ## 2026-09-28 night-session handoff
 
@@ -229,3 +232,26 @@ The master plan and acceptance criteria remain in `IMPLEMENTATION_PLAN.md` and
 - 95 local cases + all 3 SDK runs pass; Kalkan PEM writer → client parser →
   strict TEST OCSP → HTTP test receipt/retry is verified. The user's desktop
   signing retest, legal-entity certificate acceptance and powers remain open.
+
+## 2026-09-30 supervised UAT and genuine negative fixtures
+
+- Baseline local `main` at `38801b38ec230f7afee52aaf731759822649ef6b`;
+  no push, deployment, grant, wallet or payment in this step.
+- User-operated Chrome/NCALayer signing succeeded at 09:29:46 UTC; retry at
+  09:33:21 UTC returned the same SQLite receipt/hash/verifiedAt without a new
+  status check. The digest matches the bundled legal-entity employee-with-signing-
+  rights certificate. This does not establish corporate representation.
+- Mandatory genuine SDK individual revoked and Treasury wrong-purpose fixtures
+  refuse through Java and HTTP, with no stored signature digest or receipt.
+  Exact CMS/CA/validity checks prove the wrong-purpose fixture is non-vacuous;
+  strict TEST OCSP proves the revoked fixture is actually revoked. Eligible
+  signing after both failures can still consume the same challenge once.
+- Fixed explicit fixture selection and strengthened safe internal revoked/unknown
+  stage assertions; no weaker trust/status rules or new dependencies. Regressions
+  failed before the changes; 88 Node + 7 offline Solana and all 3 SDK runs pass.
+- Gracefully restarted the local TEST OCSP stand at `127.0.0.1:4175`; HTTP 200
+  and local trust/config readiness pass. Saved UAT receipt/hash/digest/verifiedAt
+  match the ignored SQLite backup after restart; no fresh signature or grant.
+- Next: stable identity and same-identity replacement acceptance. Business powers,
+  authority connection, signed deals, private files and devnet remain gated;
+  official rules/provenance and independent review are still outstanding.
