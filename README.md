@@ -7,8 +7,10 @@ Evidence-led agricultural deals in Kazakhstan, with transaction-specific e-signa
 A separate opt-in [personal TEST-enrollment page](nca/README.md) now connects
 server-issued sessions/CSRF to the retained local binding registry. Genuine
 SDK-generated personal CMS passes isolated HTTP enrollment/retry/close; this is
-not authenticated account access. Remaining browser QA is blocked by the browser
-service's access-policy check, and manual personal NCALayer enrollment is pending.
+not authenticated account access. [Manual personal enrollment/retry/close](.planning/spikes/016-browser-personal-test/UAT.md)
+is now human-confirmed, with one durable receipt/no duplicate and a current
+revision2 backup read back independently. Agent browser QA remains blocked by
+the browser service's access-policy check; closure itself relies on the human report.
 
 ## The problem
 
@@ -36,7 +38,7 @@ The first planned vertical is a livestock deal. The grain/oilseed alternative re
 - [Spike 013](.planning/spikes/013-test-subject-identity/README.md) — internal opaque TEST person/organization mapping and genuine CMS/offline-store replacement checks; not browser enrolment, corporate authority or a real wallet.
 - [Spike 014](.planning/spikes/014-personal-binding-intents/README.md) — protected TEST mapping key, dedicated personal enrollment/replacement intents, atomic replay/retirement and backup/restart; genuine personal enrollment passes, positive renewal is synthetic only, no HTTP login or wallet.
 - [Spike 015](.planning/spikes/015-retained-binding-checkpoint/README.md) — retained local TEST checkpoint rejects stale binding backups/clones; joint-write rollback and current restore checks pass. Not encrypted custody, full-host anti-rollback or enabled browser login.
-- [Spike 016](.planning/spikes/016-browser-personal-test/README.md) — opt-in browser personal TEST enrollment with server-issued session/CSRF, limits and closed-session refusal. Genuine SDK HTTP enrollment/negatives pass; not identity login, corporate powers or manual enrollment UAT.
+- [Spike 016](.planning/spikes/016-browser-personal-test/README.md) — opt-in browser personal TEST enrollment with server-issued session/CSRF and limits. SDK HTTP/negatives pass; narrow manual UAT human-confirmed with persisted/no-duplicate evidence and revision2 backup. Not identity login or corporate powers; agent UI QA and genuine renewal remain open.
 - [Spike 011](.planning/spikes/011-ncalayer-roundtrip/README.md) — historical browser/API stand and corrected CRL-pair gate; later TEST OCSP acceptance is recorded in Spike 012.
 - [Offline deal workflow](workflow/README.md) — test-key transfer fixture, persistent decision policy, frozen terms and a local signed-byte bridge with an internal demo record; not a browser API, NCA integration or real payment.
 - [Spike 009](.planning/spikes/009-immutable-terms-evidence/README.md) — local snapshot, same-file freshness and honestly labelled metadata/receipt record; offline only.

@@ -129,6 +129,12 @@ TEST binding library. This is enrollment evidence, **not login or a business gra
 
 ## Next manual acceptance
 
+The personal enrollment/retry/close sequence was subsequently confirmed by the
+human, with one durable receipt and current revision2 backup independently read
+back. See the [manual UAT checkpoint](UAT.md) for the exact evidence sources and
+the closure-observation limit. The automated UI checks below remain open;
+enrollment/retry/close need not be repeated merely to satisfy this old checklist.
+
 The earlier PID 81836 later crashed in SQLite WAL shared memory. The loopback
 store has been recovered with preserved rows and rollback journaling; current
 counts are 161 Node + 7 offline Solana and four SDK runs. See the separate

@@ -67,7 +67,7 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
   it. A retained local TEST checkpoint now validates registry/key/revision/schema/
   data and rejects older snapshots or stale live clones. Intent/receipt and
   checkpoint advance together using attached DELETE-journal/FULL transactions.
-  Empty private registry/current backup are prepared, not loaded by HTTP; the
+  Spike015 prepared the empty registry/current pair without HTTP loading; the
   checkpoint is outside ordinary backups on the same filesystem. Focused storage
   review led to history MAC, expiry, joint-write, concurrent backup and bootstrap
   fixes. Whole-volume rollback, encrypted production custody, physical-fault
@@ -76,8 +76,11 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
   evidence with bounded server-issued session/CSRF and shared verifier slots.
   Genuine SDK CMS through HTTP enrolls/retries/closes; corporate/revoked/wrong-
   purpose/altered CMS refuse. Closing/expiring a session while SDK awaits refuses
-  before joint commit. No identity login/account/grant, manual enrollment UAT or
-  eligible personal renewal pair is claimed. Default personal API stays disabled.
+  before joint commit. Manual enrollment/retry/close is now human-confirmed;
+  operator registry/backup/checkpoint revision2 and one receipt/no duplicate were
+  independently read back. Closure itself relies on the human report. No identity
+  login/account/grant or eligible renewal pair is claimed. Default personal API
+  stays disabled; operator opt-in uses the existing private registry.
 
 ## Build status
 
@@ -94,7 +97,7 @@ Devnet lamports are a test rail; KZT and escrow are not yet implemented.
 
 `mvp_complete: false`
 
-`tests_passing: true` (161 Node + 7 offline Solana cases, plus 4 SDK runs including 47 OCSP and 30 subject-parser checks, CRL refusal, live TEST OCSP HTTP/genuine negatives and personal-binding/checkpoint/backup/browser-HTTP checks, as of 2026-09-30; supervised NCALayer test-signature/retry UAT also passed. Opt-in personal listener runs locally after WAL-crash recovery with preserved rows and two new rollback/WAL-frame regressions; browser-policy verification still blocks UI/keyboard/responsive QA. Not manual personal-enrollment/identity-login/business-grant or devnet acceptance.)
+`tests_passing: true` (latest code gates: 161 Node + 7 offline Solana, plus 4 SDK runs, as of 2026-09-30; not rerun for the documentation-only UAT checkpoint. Supervised signature-probe UAT passed; narrow personal enrollment/retry/close now human-confirmed, one receipt/no duplicate and current revision2 backup independently read back. Closure relies on the human report; agent browser-policy verification still blocks keyboard/responsive/real-cookie observations. Not identity-login/business-grant or devnet acceptance.)
 
 `devnet_deployed: false`
 `program_id: null` (no custom on-chain program in this slice)
@@ -343,3 +346,21 @@ The dated handoffs below preserve earlier checkpoints, not current gate status.
   preserved exactly; only unconsumed old request already expired. Personal state
   still revision0/empty. Browser-policy check blocks UI UAT, no bypass. See
   `.planning/spikes/016-browser-personal-test/RECOVERY.md` for evidence and handoff.
+
+## 2026-09-30 manual personal enrollment checkpoint
+
+- Baseline clean local `5be310bb243a1629e58524779cdd61c6a7b47092`. User reported
+  signing complete, then retry/same-ID/close steps complete. Signing is corroborated
+  by the operator registry, not an automated fixture: one intent/binding/receipt,
+  `test_personal_binding_only`, epoch0, verified at14:52:33Z.
+- Independent post-retry readback matches the original receipt/hash/MAC exactly.
+  Registry/checkpoint remain revision2; no duplicate. Session deletion is in-memory
+  and human-confirmed, not proven by DB counts or an agent browser observation.
+- Protected current pair is `.local/nca-personal-bindings-enrollment-backup-r2-20260930T145233Z`,
+  published/synced, owner-only files, matching original key/binding/certificate,
+  integrityok and available against the retained root. Old revision0 pair refuses
+  as stale; preserved historically, never reset the root to make it accepted.
+- Documentation only; code tests not rerun or new OCSP/CMS requests issued. See
+  `.planning/spikes/016-browser-personal-test/UAT.md`. Spike016 remains PARTIAL:
+  automated full UI QA/real-cookie observation blocked; eligible genuine renewal
+  pair still missing; no login/powers/wallet/payment/devnet enabled.

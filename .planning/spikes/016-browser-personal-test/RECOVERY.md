@@ -75,3 +75,8 @@ ineligible for personal enrollment. For an already received signature on the
 original probe page, identical retry in that same tab may retrieve a saved
 receipt; it does not guarantee a fresh successful check. An expired unconsumed
 request requires a new request and signature.
+
+The human subsequently completed the narrow personal enrollment/retry/close
+sequence. Current registry/checkpoint and protected pair are now revision2 with
+one binding/receipt; this recovery-time revision0 snapshot is historical. See
+the [manual UAT checkpoint](UAT.md) for exact evidence sources and the new backup.

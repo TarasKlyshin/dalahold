@@ -309,14 +309,17 @@ Operator rules:
    authorize that backup as a new concurrent writer. Never infer physical-fault
    durability or successful recovery merely from a copied file.
 
-The empty `.local/nca-personal-bindings` is now explicitly upgraded, preserving
-its original key at revision 0. The retained checkpoint is
+At Spike015 the empty `.local/nca-personal-bindings` was explicitly upgraded,
+preserving its original key at revision0. The retained checkpoint is
 `/Volumes/dev/dev/.dalahold-test-control/personal-bindings-anchor/checkpoint.sqlite`;
-the new current pair is `.local/nca-personal-bindings-retained-checkpoint-backup`.
-Current-pair open passes, and the old initial pair refuses as a current registry.
-The old initial backup is preserved as a historical artifact, **not a current
-restore candidate**. This state is prepared, not runtime authentication; see
-Spike 015 for readback evidence and remaining limits.
+that stage's pair was `.local/nca-personal-bindings-retained-checkpoint-backup`.
+After manual TEST enrollment, live/checkpoint state is **revision2**. The current
+pair is `.local/nca-personal-bindings-enrollment-backup-r2-20260930T145233Z`;
+opening against the retained checkpoint and matching the binding/receipt passes.
+The old revision0 pair now refuses as stale. Both old pairs remain historical
+artifacts, **not current restore candidates**. Do not roll back the checkpoint to
+make them open. See the [manual UAT checkpoint](../.planning/spikes/016-browser-personal-test/UAT.md)
+for backup evidence; this still does not enable account authentication.
 
 ### Opt-in browser personal TEST enrollment, 30 September 2026
 
@@ -382,8 +385,11 @@ The opt-in listener is running locally. Browser navigation reached the new page,
 but further UI/keyboard/responsive checks were blocked when the browser service
 could not verify its mandatory access policy. They remain unaccepted; no bypass
 or alternative browser transport was used. Production auth, encrypted custody,
-full-host rollback, powers, renewal, deals and devnet
-remain closed; the manual TEST personal enrollment is the next user check.
+full-host rollback, powers, renewal, deals and devnet remain closed.
+The separate [manual TEST enrollment/retry/close checkpoint](../.planning/spikes/016-browser-personal-test/UAT.md)
+is now human-confirmed; one durable binding/receipt and no duplicate were read
+back independently. Session closure is human-confirmed, not proven by DB counts;
+automatic real-browser QA and genuine same-person renewal remain open.
 
 ## Start and check
 
@@ -393,7 +399,8 @@ now pins DELETE rollback journaling, FULL synchronization and `mmap_size=0`,
 avoiding its observed mapped WAL-index crash path. SQLite converts old WAL state;
 never manually remove WAL/SHM, restore an older DB, or reset the personal checkpoint
 as a recovery shortcut. Underlying physical/OS failure cause remains unconfirmed.
-Browser UAT is still blocked by the browser service's mandatory access-policy gate.
+Agent browser QA is still blocked by the browser service's mandatory access-policy
+gate; the separately human-confirmed narrow UAT is recorded above.
 
 From the project root, use the SDK directory containing `Java/` and
 `Keys and Certs/`. The SDK and keys remain outside Git.
