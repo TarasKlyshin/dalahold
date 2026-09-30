@@ -2,7 +2,7 @@
 
 Evidence-led agricultural deals in Kazakhstan, with transaction-specific e-signature approval and a Solana devnet settlement demonstration.
 
-> Status: discovery and architecture planning. No application, live escrow, digital-tenge integration, or production payment service has been built yet.
+> Status: discovery, architecture planning, a clickable UX prototype, and a loopback-only API that saves versioned unsigned local deal drafts, their fingerprints and metadata-only document markers. A separate offline test policy and SQLite ledger model deal decisions with a frozen terms snapshot and internal demo record; they are not connected to the browser or a real identity provider. A separate local NCALayer/API/Java test-signature stand is implemented, but status acceptance is blocked by incompatible official test base/delta CRLs. SDK exact-byte cryptography and the browser's NCALayer TLS connection are tested; NCALayer signature output and a verified end-to-end receipt are not. The selected file's bytes and name are not uploaded automatically; user-entered descriptions do persist. Neither a fingerprint, marker nor local test receipt proves an NCA signature or file authenticity. No verified user e-signature flow, live escrow, digital-tenge integration, or production payment service has been built yet.
 
 ## The problem
 
@@ -21,6 +21,15 @@ The first planned vertical is a livestock deal. The grain/oilseed alternative re
 
 ## Current materials
 
+- [Project brief](PROJECT_BRIEF.md) — problem hypothesis, intended flow, clear limits, and next validation test.
+- [Implementation plan](IMPLEMENTATION_PLAN.md) — 20-day build sequence and acceptance gates.
+- [Technical prototype](TECHNICAL_PROTOTYPE.md) — exact EDS-to-Solana trust boundary, certificate rotation and mandatory negative tests; specification only, not a working integration.
+- [NCA adapter contract](NCA_ADAPTER_CONTRACT.md) — fail-closed verification interface and receipt checklist; no user signing integration yet.
+- [Local NCA test-signature stand](nca/README.md) — session-bound exact-byte CMS, one-use test receipt and SDK checks using bundled test material; incompatible CRLs block acceptance, no personal certificate or payment.
+- [Spike 011](.planning/spikes/011-ncalayer-roundtrip/README.md) — implemented browser/API stand, observed checks, corrected CRL-pair gate and open NCALayer acceptance.
+- [Offline deal workflow](workflow/README.md) — test-key transfer fixture, persistent decision policy, frozen terms and a local signed-byte bridge with an internal demo record; not a browser API, NCA integration or real payment.
+- [Spike 009](.planning/spikes/009-immutable-terms-evidence/README.md) — local snapshot, same-file freshness and honestly labelled metadata/receipt record; offline only.
+- [Clickable prototype and local unsigned-draft API](prototype/README.md) — run it locally and test both deal paths; draft terms and metadata-only markers persist, but files do not.
 - [Master plan](MASTERPLAN.md) — scope, architecture, 20-day schedule, risks, and acceptance criteria.
 - [Livestock interviews](INTERVIEW_CARDS_AGRI.md) — discussion cards for farmers and buyers.
 - [Crop interviews](INTERVIEW_CARDS_CROPS.md) — discussion cards for growers, buyers, and grain-market participants.

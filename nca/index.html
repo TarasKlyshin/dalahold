@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DalaHold · тестовая ЭЦП</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/client.mjs"></script>
+</head>
+<body>
+  <header><a class="brand" href="http://127.0.0.1:4174/">dalahold.</a><span>Локальный стенд · тестовый сертификат</span></header>
+  <main id="workspace" aria-busy="false">
+    <h1>Проверка тестовой ЭЦП</h1>
+    <p class="intro">Подпиши одно тестовое распоряжение через NCALayer. Сервер проверит его точные байты, назначение сертификата, тестовую цепочку и локальные тестовые CRL.</p>
+    <aside class="notice" role="note">Используй только тестовый <code>.p12</code> из SDK: <strong>Keys and Certs → Gost2015 → 2026.05.08-2027.05.07 → Физическое лицо</strong>, контейнер для подписи. Пароль вводится в NCALayer. Этот стенд не создаёт доступ к кошельку и не выполняет платёж.</aside>
+    <section aria-label="Готовность">
+      <p id="sdk">Проверяем SDK и тестовые CRL…</p>
+      <p id="connection">NCALayer: соединение ещё не проверено</p>
+      <button id="connect" type="button">Проверить NCALayer</button>
+    </section>
+    <section aria-labelledby="instructionTitle">
+      <h2 id="instructionTitle">1. Посмотреть распоряжение</h2>
+      <button id="create" type="button" disabled>Создать тестовое распоряжение</button>
+      <div id="instruction" hidden>
+        <p id="expiry"></p>
+        <pre id="exactBytes" tabindex="0" aria-label="Точные подписываемые данные"></pre>
+        <p class="small">SHA-256 точных байтов</p><code class="digest" id="hash"></code>
+      </div>
+    </section>
+    <section aria-labelledby="signTitle">
+      <h2 id="signTitle">2. Подписать и проверить</h2>
+      <p>В открывшемся окне NCALayer выбери комплектный тестовый сертификат. Полученная подпись отправится на локальный сервер автоматически.</p>
+      <div class="actions"><button id="sign" class="primary" type="button" disabled>Подписать и проверить</button><button id="retry" type="button" disabled>Повторить отправку</button></div>
+      <p id="result" role="status" aria-live="polite">Подготовка сервера…</p>
+      <div id="receipt" hidden>
+        <h3>Тестовая квитанция</h3>
+        <dl><dt>ID</dt><dd id="receiptId"></dd><dt>Подписанные байты</dt><dd id="receiptHash"></dd><dt>Область проверки</dt><dd id="receiptScope"></dd></dl>
+      </div>
+    </section>
+    <footer>
+      <button id="export" type="button">Открыть журнал проверки</button>
+      <p class="small">Журнал содержит коды событий и время. Контейнер подписи, пароль и персональные поля сертификата в него не входят.</p>
+      <details id="logPreview" hidden><summary>Журнал текущей проверки</summary>
+        <pre id="logBytes" tabindex="0" aria-label="Журнал проверки"></pre>
+        <a id="logDownload" download="dalahold-test-events.json">Скачать JSON</a>
+      </details>
+    </footer>
+  </main>
+</body>
+</html>

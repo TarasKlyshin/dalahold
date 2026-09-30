@@ -19,6 +19,7 @@ dist/
 build/
 target/
 coverage/
+.local/
 *.log
 *.sqlite
 *.sqlite-wal

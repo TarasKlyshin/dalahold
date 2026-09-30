@@ -10,6 +10,10 @@ The first experiment does not establish a production stack or reusable applicati
 
 ## Experiment choices, not production commitments
 
-- Spike 001 uses Node 22 built-ins and no dependencies to isolate policy behavior.
+- The local policy and draft experiments use Node 22 built-ins and no new dependencies to isolate their behavior; this is still not a production architecture decision.
 - Local Ed25519 test keys are never represented as NCA certificates.
 - Console test output is appropriate for this binary security property; user-facing transaction UX remains in the separate `prototype/` folder.
+- SDK and NCALayer experiments use only public test CA/status assets on the
+  server. CRL signature and expiry alone are insufficient: base/delta numbers
+  and scope must agree. `.local/` is ignored; downloaded SDK/private keys are
+  never copied into Git. A failed status fixture blocks test receipt issuance.

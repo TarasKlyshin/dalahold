@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#183e33" />
+    <meta name="description" content="DalaHold — локальный прототип аграрной сделки. Без настоящей ЭЦП, денег и транзакций." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Prata&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>DalaHold — журнал сделки · прототип</title>
+  </head>
+  <body>
+    <div class="demo-ribbon" role="note">
+      <span class="ribbon-dot" aria-hidden="true"></span>
+      <span id="modeRibbon">Кликабельный UX-прототип · ЭЦП, деньги и Solana здесь не подключены</span>
+    </div>
+
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Навигация DalaHold">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <div class="brand-name">dala<span>hold</span><b>.</b></div>
+            <div class="brand-caption">ЖУРНАЛ АГРОСДЕЛКИ</div>
+          </div>
+        </div>
+
+        <div class="sidebar-section-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+        <nav class="side-nav" aria-label="Разделы">
+          <button class="nav-item is-active" type="button" data-nav="deals" aria-current="page"><span class="nav-glyph" aria-hidden="true">▦</span> Сделки <span class="nav-count">01</span></button>
+          <button class="nav-item" type="button" data-nav="evidence"><span class="nav-glyph" aria-hidden="true">≡</span> Журнал событий</button>
+          <button class="nav-item" type="button" data-nav="wallet"><span class="nav-glyph" aria-hidden="true">◇</span> Кошелёк</button>
+          <button class="nav-item" type="button" data-nav="reputation"><span class="nav-glyph" aria-hidden="true">◎</span> Репутация</button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="field-line" aria-hidden="true"></div>
+          <p class="sidebar-quote">«Сначала договориться.<br />Потом подтвердить.»</p>
+          <div class="sidebar-mini">Казахстан · пилотная концепция</div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="topbar-path">ПРОЕКТ / <strong id="sectionLabel">СДЕЛКИ</strong></div>
+          <div class="topbar-actions">
+            <span class="status-chip"><span class="status-dot" aria-hidden="true"></span> Демо-режим</span>
+            <button class="role-switch" id="roleSwitch" type="button" aria-label="Сменить тестовый аккаунт">Сейчас: <strong id="roleName">Продавец</strong><span aria-hidden="true">⌄</span></button>
+          </div>
+        </header>
+
+        <section class="workspace" aria-live="polite">
+          <div class="view" id="view-deals">
+            <div class="section-heading">
+              <div><div class="eyebrow"><span class="eyebrow-line"></span> РАБОЧИЙ СТОЛ · ДЕМО</div><h1>Сделка под контролем</h1></div>
+              <button class="outline-button" id="createDeal" type="button"><span aria-hidden="true">＋</span> Новая сделка</button>
+            </div>
+
+            <div class="scenario-toolbar">
+              <div class="scenario-tabs" role="group" aria-label="Демонстрационный сценарий">
+                <button class="scenario-tab is-selected" id="scenarioLivestock" type="button" aria-pressed="true">Животноводство</button>
+                <button class="scenario-tab" id="scenarioGrain" type="button" aria-pressed="false">Зерно</button>
+              </div>
+              <button class="text-button" id="resetDemo" type="button">Сбросить сценарий <span aria-hidden="true">↺</span></button>
+            </div>
+            <div class="saved-drafts" id="savedDrafts" hidden>
+              <label for="savedDealSelect">Сохранённые черновики</label>
+              <select id="savedDealSelect" aria-label="Выбрать сохранённый черновик"></select>
+                <span>Условия и метки · без ЭЦП</span>
+            </div>
+
+            <div class="deal-tabs" role="tablist" aria-label="Карточка сделки">
+              <button class="deal-tab is-active" id="tabOverview" type="button" role="tab" aria-selected="true" aria-controls="dealOverview">Обзор сделки</button>
+              <button class="deal-tab" id="tabDocuments" type="button" role="tab" aria-selected="false" aria-controls="dealDocuments" tabindex="-1">Документы <span class="tab-count" id="docsCount">0</span></button>
+            </div>
+
+            <div id="dealOverview" role="tabpanel" aria-labelledby="tabOverview">
+              <div class="deal-layout">
+              <article class="deal-card" aria-labelledby="dealTitle">
+                <div class="deal-card-top">
+                  <div><div class="deal-kicker" id="dealNumber">СДЕЛКА № DH-001 · ПРИМЕР</div><h2 id="dealTitle">Партия КРС · 12 голов</h2></div>
+                  <span class="deal-status" id="dealStatus">Черновик</span>
+                </div>
+
+                <div class="parties">
+                  <div class="party"><span class="party-icon party-seller" aria-hidden="true">Ф</span><div><small>ПРОДАВЕЦ</small><strong id="sellerName">ФХ «Сарыарка»</strong></div></div>
+                  <div class="party-arrow" aria-hidden="true">→</div>
+                  <div class="party"><span class="party-icon party-buyer" aria-hidden="true">З</span><div><small>ПОКУПАТЕЛЬ</small><strong id="buyerName">ТОО «Береке»</strong></div></div>
+                </div>
+
+                <div class="deal-metrics">
+                  <div><small>СУММА СДЕЛКИ</small><strong id="dealAmount">8 400 000 ₸</strong><span id="amountNote">Пример, не рыночная оценка</span></div>
+                  <div><small id="quantityLabel">ПАРТИЯ</small><strong id="dealQuantity">12 голов</strong><span id="dealDate">Передача до 10 октября</span></div>
+                  <div><small>СПОСОБ РАСЧЁТА</small><strong>Демо-удержание</strong><span>Настоящие деньги не движутся</span></div>
+                </div>
+
+                <section class="draft-history" id="draftHistory" aria-label="Версии черновика" hidden>
+                  <div class="draft-history-head"><strong>Версии условий · без ЭЦП</strong><button class="inline-link" id="editDraft" type="button">Изменить черновик →</button></div>
+                  <ol id="draftVersions"></ol>
+                  <div class="version-diff" id="versionDiff" hidden><strong id="versionDiffTitle">Что изменилось</strong><dl id="versionChanges"></dl></div>
+                  <p>Прежние версии сохранены только на этом компьютере. Ни одна из них не подписана сторонами.</p>
+                  <div class="fingerprint-box"><span>ОТПЕЧАТОК ТЕКУЩЕЙ ВЕРСИИ · SHA-256</span><code id="termsFingerprint">—</code><p>Для сверки одинаковых условий. Это не ЭЦП и не защита от изменения локальной базы.</p></div>
+                </section>
+
+                <div class="deal-progress">
+                  <div class="progress-head"><strong>Маршрут сделки</strong><span id="progressCount">Шаг 0 из 6</span></div>
+                  <div class="progress-track" aria-hidden="true"><span id="progressFill"></span></div>
+                  <div class="progress-labels"><span>Условия</span><span>Обеспечение</span><span>Передача</span><span>Расчёт</span></div>
+                </div>
+
+                <div class="next-step">
+                  <div class="next-step-icon" aria-hidden="true">↗</div>
+                  <div class="next-step-copy"><small>СЛЕДУЮЩИЙ ШАГ</small><strong id="nextTitle">Подготовить предложение</strong><p id="nextDescription">Продавец проверяет условия и отправляет их покупателю.</p></div>
+                </div>
+
+                <div class="deal-actions">
+                  <button class="primary-button" id="primaryAction" type="button">Отправить предложение <span aria-hidden="true">→</span></button>
+                  <button class="quiet-button" id="secondaryAction" type="button" hidden>Открыть спор</button>
+                </div>
+
+                <p class="deal-footnote">Демо-переключатель ролей показывает двух разных тестовых участников. Нельзя заключить сделку с самим собой.</p>
+                <p class="deal-footnote" id="persistenceNote">Кнопки маршрута и метки документов существуют только в текущем браузерном сеансе.</p>
+                <p class="deal-footnote" id="scenarioLimit" hidden>Зерновой путь пока иллюстрирует общий маршрут. Вес по машинам, качество и частичная приёмка в этом макете не реализованы.</p>
+              </article>
+
+              <aside class="insight-column" aria-label="Состояние проверки сделки">
+                <div class="insight-card basis-card">
+                  <div class="card-eyebrow">ПО ЭТОЙ СДЕЛКЕ</div>
+                  <h2>Что подтверждено</h2>
+                  <dl class="basis-list">
+                    <div><dt>Условия</dt><dd id="basisTerms">Черновик · без ЭЦП</dd></div>
+                    <div><dt>Передача</dt><dd id="basisDelivery">Не заявлена</dd></div>
+                    <div><dt>Расчёт</dt><dd id="basisSettlement">Не проводился</dd></div>
+                  </dl>
+                  <button class="inline-link" type="button" data-open-view="evidence">Открыть журнал событий <span aria-hidden="true">→</span></button>
+                </div>
+                <div class="insight-card rail-card">
+                  <div class="card-eyebrow">СПОСОБЫ РАСЧЁТА · СТАТУС</div>
+                  <div class="rail-row"><span>Наличные / банк</span><strong>Только отметка сторон</strong></div>
+                  <div class="rail-row"><span>Демо-₸</span><strong>Симуляция</strong></div>
+                  <div class="rail-row"><span>Solana devnet</span><strong>Не подключена</strong></div>
+                  <div class="rail-row"><span>Цифровой тенге</span><strong>Не подключён</strong></div>
+                  <p>Кликабельный прототип не принимает и не переводит средства.</p>
+                </div>
+              </aside>
+              </div>
+            </div>
+
+            <div id="dealDocuments" role="tabpanel" aria-labelledby="tabDocuments" hidden>
+              <div class="documents-layout">
+                <section class="documents-main" aria-labelledby="documentsTitle">
+                  <div class="documents-head">
+                    <div>
+                      <div class="eyebrow"><span class="eyebrow-line"></span> ПАПКА КОНКРЕТНОЙ СДЕЛКИ</div>
+                      <h2 id="documentsTitle">Документы и основания</h2>
+                      <p id="documentsSubtitle">Планируемые документы для сделки КРС и локальные демо-вложения.</p>
+                    </div>
+                    <button class="primary-button" id="addDocument" type="button">Добавить в макет <span aria-hidden="true">＋</span></button>
+                  </div>
+                  <div class="documents-notice" role="note"><span class="documents-notice-mark" aria-hidden="true">i</span><p id="documentsNotice"><strong>Только локальная демонстрация.</strong> Содержимое файла не считывается и не отправляется. В карточке остаётся только метка; это не проверенный документ.</p></div>
+                  <div id="documentsList" class="documents-list"></div>
+                  <section id="archivedMarkers" class="archived-markers" aria-labelledby="archivedMarkersTitle" hidden><h3 id="archivedMarkersTitle">Метки прежних версий</h3><p>Эти записи относятся к старым условиям и не переносятся автоматически в текущую версию.</p><ul id="archivedMarkerList"></ul></section>
+                </section>
+                <aside class="documents-aside" aria-label="Статус документов в макете">
+                  <div class="card-eyebrow">ДОКУМЕНТЫ · ДЕМО</div>
+                  <h2>Что означает вложение</h2>
+                  <dl class="basis-list">
+                    <div><dt>Файл</dt><dd id="fileStorageStatus">Содержимое не хранится; метка только в браузере</dd></div>
+                    <div><dt>Источник</dt><dd>Указан участником, не проверен</dd></div>
+                    <div><dt>ЭЦП</dt><dd>Не подключена</dd></div>
+                  </dl>
+                  <p>В рабочем продукте понадобятся автор, дата, версия условий и связь с партией или отгрузкой. Фото и скан сами по себе не подтверждают данные реестра, лаборатории или банка.</p>
+                </aside>
+              </div>
+            </div>
+          </div>
+
+          <div class="view" id="view-evidence" hidden>
+            <div class="section-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> ИСТОЧНИК КАЖДОГО ШАГА</div><h1>Журнал событий</h1></div></div>
+            <div class="interior-grid"><section class="paper-panel"><div class="panel-title"><h2>История этой сделки</h2><span class="mini-chip">Демо-события</span></div><ol class="event-list" id="eventList"></ol></section><aside class="paper-panel legend-panel"><h2>Что означают метки</h2><div class="legend-item"><span class="legend-dot dot-claim"></span><div><strong>Заявлено стороной</strong><p>Физическое событие пока не проверено независимо.</p></div></div><div class="legend-item"><span class="legend-dot dot-demo"></span><div><strong>Смоделировано</strong><p>Клик в прототипе, а не ЭЦП или транзакция.</p></div></div><div class="legend-item"><span class="legend-dot dot-external"></span><div><strong>Внешний источник</strong><p>Появится только после реальной интеграции и проверки.</p></div></div></aside></div>
+          </div>
+
+          <div class="view" id="view-wallet" hidden>
+            <div class="section-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> СТАБИЛЬНЫЙ ВЛАДЕЛЕЦ</div><h1>Кошелёк и ЭЦП</h1></div></div>
+            <div class="interior-grid"><section class="paper-panel wallet-panel"><div class="panel-title"><h2>Адрес владельца</h2><span class="mini-chip">Концепция</span></div><p class="wallet-placeholder">Адрес появится после настоящей devnet-интеграции.</p><div class="wallet-divider"></div><div class="wallet-info"><span>Постоянный ID участника</span><strong>DEMO-OWNER-01</strong></div><div class="wallet-info"><span>Сертификат ЭЦП</span><strong id="certificateLabel">Тестовая версия A</strong></div><button class="primary-button" id="renewCertificate" type="button">Смоделировать перевыпуск <span aria-hidden="true">→</span></button></section><aside class="paper-panel explanation-panel"><div class="card-eyebrow">ПОСЛЕ РЕАЛЬНОЙ ИНТЕГРАЦИИ</div><h2>Замена сертификата без смены адреса</h2><p>Новая ЭЦП должна пройти повторную проверку личности и полномочий. Solana-ключ будет храниться отдельно от ЭЦП, поэтому адрес владельца не зависит от номера сертификата.</p><div class="warning-note"><strong>Сейчас ЭЦП и кошелёк не подключены.</strong><span>Кнопка слева меняет только демонстрационную метку, не восстанавливает доступ.</span></div></aside></div>
+          </div>
+
+          <div class="view" id="view-reputation" hidden>
+            <div class="section-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> РАЗДЕЛЬНЫЕ ОЦЕНКИ РОЛЕЙ</div><h1>Отзывы участников сделки</h1></div></div>
+            <div class="reputation-grid"><article class="reputation-card"><div class="rep-icon" aria-hidden="true">↗</div><small>КАК ПРОДАВЕЦ</small><strong id="sellerRating">Нет истории</strong><p id="sellerRatingNote">Отзывы появятся только после завершённой сделки.</p></article><article class="reputation-card"><div class="rep-icon rep-icon-alt" aria-hidden="true">↙</div><small>КАК ПОКУПАТЕЛЬ</small><strong id="buyerRating">Нет истории</strong><p id="buyerRatingNote">Новая учётная запись не получает искусственную оценку.</p></article></div><div class="reputation-note"><span aria-hidden="true">✳</span><p>В продукте один профиль сможет быть продавцом в одной сделке и покупателем в другой, с отдельными оценками по ролям. В этом макете показаны два тестовых участника одной сделки; оценки не публикуются и не доказывают качество товара или платёжеспособность.</p></div>
+          </div>
+        </section>
+
+        <footer class="site-footer"><span>DALA/HOLD © 2026 · ЛОКАЛЬНЫЙ ПРОТОТИП</span><span>Без ЭЦП · без денег · без on-chain транзакций</span></footer>
+      </main>
+    </div>
+
+    <dialog class="app-dialog" id="actionDialog" aria-labelledby="actionDialogTitle">
+      <div class="dialog-head"><div class="dialog-kicker" id="actionDialogKicker">ДЕМО-ПОДТВЕРЖДЕНИЕ</div><button class="icon-button" type="button" data-close-dialog aria-label="Закрыть">×</button></div>
+      <h2 id="actionDialogTitle">Подтвердить действие</h2>
+      <p id="actionDialogBody"></p>
+      <div class="signed-preview" id="signedPreview"></div>
+      <div class="dialog-disclaimer"><span aria-hidden="true">!</span><p>Это только переход между экранами прототипа. NCALayer не вызывается, ЭЦП не создаётся, средства не перемещаются.</p></div>
+      <div class="dialog-actions"><button class="quiet-button" type="button" data-close-dialog>Отмена</button><button class="primary-button" id="confirmAction" type="button">Смоделировать шаг <span aria-hidden="true">→</span></button></div>
+    </dialog>
+
+    <dialog class="app-dialog create-dialog" id="createDialog" aria-labelledby="createDialogTitle">
+      <div class="dialog-head"><div class="dialog-kicker" id="createKicker">НОВАЯ СДЕЛКА · ДЕМО</div><button class="icon-button" type="button" data-close-dialog aria-label="Закрыть">×</button></div>
+      <h2 id="createDialogTitle">Зафиксируем условия</h2>
+      <p id="createIntro">Это локальный черновик в браузере. Данные никуда не отправляются.</p>
+      <form id="createForm" novalidate>
+        <label>Тип партии<select id="formScenario" name="scenario"><option value="livestock">КРС</option><option value="grain">Зерно</option></select></label>
+        <label>Количество<input id="formQuantity" name="quantity" type="number" min="1" max="100000" required inputmode="numeric" /></label>
+        <label>Сумма, ₸<input id="formAmount" name="amount" type="number" min="1" max="999999999999" required inputmode="numeric" /></label>
+        <label>Срок передачи<input id="formDate" name="date" type="date" required /></label>
+        <p class="form-error" id="formError" role="alert" hidden></p>
+        <div class="dialog-actions"><button class="quiet-button" type="button" data-close-dialog>Отмена</button><button class="primary-button" id="createSubmit" type="submit">Создать черновик <span aria-hidden="true">→</span></button></div>
+      </form>
+    </dialog>
+
+    <dialog class="app-dialog create-dialog" id="documentDialog" aria-labelledby="documentDialogTitle">
+      <div class="dialog-head"><div class="dialog-kicker">ДОКУМЕНТ · ЛОКАЛЬНЫЙ МАКЕТ</div><button class="icon-button" type="button" data-close-dialog aria-label="Закрыть">×</button></div>
+      <h2 id="documentDialogTitle">Добавить метку файла</h2>
+      <p>Выбирайте только тестовый или обезличенный файл. Выбранное имя и содержимое не отправляются автоматически. Введённые описания сохраняются: не вписывайте в них личные данные или имена файлов. Сам файл будет недоступен.</p>
+      <form id="documentForm" novalidate>
+        <label>К чему относится<select id="documentCategory" name="category" required></select></label>
+        <label>Файл на этом компьютере<input id="documentFile" name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" required /></label>
+        <label>Партия / отгрузка <span class="label-optional">необязательно</span><input id="documentContext" name="context" type="text" maxlength="80" placeholder="Например, машина № 1" /></label>
+        <label>Примечание <span class="label-optional">необязательно</span><input id="documentNote" name="note" type="text" maxlength="120" placeholder="Например, вес при приёмке" /></label>
+        <p class="form-error" id="documentError" role="alert" hidden></p>
+        <div class="dialog-actions"><button class="quiet-button" type="button" data-close-dialog>Отмена</button><button class="primary-button" type="submit">Добавить метку <span aria-hidden="true">→</span></button></div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <script src="./app.js" defer></script>
+  </body>
+</html>

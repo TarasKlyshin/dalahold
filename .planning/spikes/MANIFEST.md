@@ -2,18 +2,31 @@
 
 ## Idea
 
-Prove the smallest security-critical DalaHold step before building the agricultural marketplace: one exact, expiring, one-use instruction must be authorized by a verified person, and certificate replacement must invalidate older permissions without changing that person's wallet binding.
+Prove DalaHold's security-critical boundaries and then connect a small, honest user-facing slice: one exact, expiring, one-use instruction requires verified authorization; although the SDK is now downloaded, the web cabinet may save only unsigned local draft terms and metadata-only document markers until NCALayer, server verification, identity and powers are actually integrated. It must not present them as signed deals, verified files or payments.
 
 ## Requirements
 
 - A certificate is an access credential, never the Solana private key or durable owner ID.
-- No Kazakhstan NCA or corporate-authority claim is accepted without the official developer kit, suitable test certificates, and a verifiable authority source. These are currently unavailable.
-- No real money, digital tenge, Solana signing, or devnet transfer occurs in this local spike.
+- No Kazakhstan NCA or corporate-authority claim is accepted without the official developer kit, suitable test certificates, and a verifiable authority source. SDK/test keys are downloaded; coherent status fixtures, verified identity and authority acceptance remain open.
+- Spike 001 does not move real money, issue digital tenge, or send a devnet transfer; any later rail experiment must be labelled separately from NCA authorization.
 - Replay, altered amount/recipient, expired instruction, revoked/unknown certificate, stale epoch, and signer bypass must fail in runnable tests.
-- Keep the experiment dependency-free and independent of the existing UX-only `prototype/`.
+- Spike 001 remains independent of the UX-only `prototype/`; a later integration spike may connect the prototype to a local API without claiming EDS verification.
+- Until real identity and powers verification exist, browser role switching and saved draft data do not confer authority to approve a deal.
+- Every executable deal decision must bind the exact deal ID, actor, action, terms version and fingerprint; local demo reserve/release state must never be presented as a money movement.
+- After an offer is accepted into the deal ledger, its version is immutable; edits to a separate unsigned draft cannot block the other party's acceptance or dispute. A replacement proposal needs new signatures.
 
 ## Spikes
 
 | # | Name | Type | Validates | Verdict | Tags |
 |---|------|------|-----------|---------|------|
 | 001 | exact-order-policy | standard | Given a test-verified identity and canonical operation, when it is authorized, executed, replayed or rotated, then only the current one-use approval can pass | PARTIAL | identity, replay, rotation, policy |
+| 002 | local-deal-draft | standard | Given the desktop web cabinet and local API, when a draft is created and the page or server restarts, then exact unsigned terms remain selectable while forged or malformed writes are rejected | VALIDATED | web, sqlite, draft, integration |
+| 003 | versioned-unsigned-terms | standard | Given a saved unsigned draft, when terms change, then old versions remain visible after restart and a stale editor cannot overwrite the current version | VALIDATED | web, sqlite, versions, conflict |
+| 004 | unsigned-terms-fingerprint | standard | Given a local unsigned deal version, when its identity, version or terms change, then its canonical SHA-256 fingerprint changes and the browser labels it as non-signature evidence | VALIDATED | web, hash, canonical, version |
+| 005 | draft-version-comparison | standard | Given at least two unsigned versions, when a user opens the current draft, then changed terms are explicit and an unchanged resubmission creates no false new version | VALIDATED | web, ux, versions, comparison |
+| 006 | versioned-document-markers | standard | Given a saved unsigned draft, when a test document marker is submitted or retried, then metadata alone is stored against the exact terms version and stale/forged writes fail | VALIDATED | web, sqlite, documents, idempotency |
+| 007 | offline-decision-ledger | standard | Given trusted test actors and one exact deal version, when decisions advance, retry, conflict or restart, then only ordered role-correct events persist once and disputes block demo release | VALIDATED (offline only) | workflow, sqlite, roles, dispute, idempotency |
+| 008 | signed-decision-handoff | standard | Given a saved unsigned local draft and trusted test actors, when one exact challenge is signed, retried, expired or revised before offer, then only a verified matching decision advances the offline ledger; after offer the frozen terms stay available for dispute | VALIDATED (offline only) | workflow, sqlite, signed-bytes, test-keys, stale-terms |
+| 009 | immutable-terms-evidence | standard | Given a saved draft and trusted test actors, when terms change, a challenge commits or a demo record is read, then exact bound terms and receipt provenance stay consistent or fail closed | VALIDATED (offline only) | workflow, sqlite, snapshot, evidence, race, test-keys |
+| 010 | nca-sdk-probe | standard | Given the downloaded SDK and a bundled test P12, when detached CMS is checked against exact bytes and local test CRLs, then altered bytes and absent or incoherent CRLs do not pass | PARTIAL (CMS passed; original CRL-pair coverage invalidated by 011) | nca, sdk, cms, crl, exact-bytes |
+| 011 | ncalayer-roundtrip | standard | Given an exact server test instruction, when one detached CMS is submitted, then session, SDK status and one-use receipt boundaries pass or refuse consistently | PARTIAL (UI/API prepared, incompatible official test CRLs block signing acceptance) | nca, ncalayer, cms, web, sqlite, replay |

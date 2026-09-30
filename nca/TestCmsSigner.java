@@ -1,0 +1,135 @@
+// Test harness only. Bundled test P12 selection is fixed; CMS stdout is captured
+// in memory by sdk.test.mjs. The production verifier never invokes this class.
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.net.URL;
+import java.security.KeyStore;
+import java.security.PrivateKey;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Date;
+import java.util.List;
+
+import kz.gov.pki.kalkan.jce.provider.cms.CMSSignedData;
+import kz.gov.pki.kalkan.jce.provider.cms.SignerInformationStore;
+import kz.gov.pki.provider.utils.CMSUtil;
+import kz.gov.pki.provider.utils.OCSPUtil;
+import kz.gov.pki.provider.utils.model.SigningEntity;
+import kz.gov.pki.reference.KalkanHashAlgorithm;
+import kz.gov.pki.reference.KNCAServiceRequestMethod;
+
+public final class TestCmsSigner {
+  static String phase = "input";
+  static SigningEntity entity(Path sdk, char[] password, String mode) throws Exception {
+    boolean auth = mode.equals("auth");
+    String period = mode.equals("expired") ? "2024.10.29-2025.10.29" : "2026.05.08-2027.05.07";
+    Path directory = sdk.resolve("Keys and Certs/Gost2015/" + period + "/Физическое лицо");
+    try (var files = Files.walk(directory)) {
+      for (Path file : files.filter(path -> path.toString().endsWith(".p12")).toList()) {
+        CmsVerifier.check(file.toRealPath().startsWith(directory.toRealPath()));
+        var store = KeyStore.getInstance("PKCS12", CmsVerifier.PROVIDER);
+        try (var input = Files.newInputStream(file)) { store.load(input, password); }
+        for (var names = store.aliases(); names.hasMoreElements();) {
+          String alias = names.nextElement();
+          if (!store.isKeyEntry(alias)) continue;
+          var certificate = (X509Certificate) store.getCertificate(alias);
+          var eku = certificate.getExtendedKeyUsage();
+          boolean signing = eku != null && eku.contains(CmsVerifier.SIGNING_EKU);
+          if (auth == signing) continue;
+          var chain = new ArrayList<X509Certificate>();
+          for (var cert : store.getCertificateChain(alias)) chain.add((X509Certificate) cert);
+          return new SigningEntity((PrivateKey) store.getKey(alias, password), chain);
+        }
+      }
+    }
+    throw new IllegalStateException("test key unavailable");
+  }
+
+  interface Check { void run() throws Exception; }
+  static void rejects(Check check) throws Exception {
+    boolean rejected = false;
+    try { check.run(); } catch (Exception expected) { rejected = true; }
+    if (!rejected) throw new IllegalStateException("negative test accepted");
+  }
+
+  public static void main(String[] args) {
+    try { run(args); }
+    catch (Exception error) {
+      System.out.println("{\"testError\":\"" + phase + "\",\"type\":\"" +
+          error.getClass().getSimpleName() + "\"}");
+    }
+  }
+
+  static void run(String[] args) throws Exception {
+    CmsVerifier.check(args.length == 3);
+    Path sdk = Path.of(args[0]);
+    var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+    char[] password = input.readLine().toCharArray();
+    phase = "load_test_key";
+    SigningEntity signing;
+    try { signing = entity(sdk, password, args[1]); }
+    finally { Arrays.fill(password, '\0'); }
+    if (args[1].equals("ocsp-diagnostic")) {
+      // Reachability diagnostic only. SDK utility omits responder authorization,
+      // response-to-request CertID and freshness checks: never an acceptance gate.
+      phase = "test_ocsp_request";
+      var factory = CertificateFactory.getInstance("X.509", CmsVerifier.PROVIDER);
+      X509Certificate ca;
+      try (var certificate = Files.newInputStream(sdk.resolve(
+          "Keys and Certs/CA_Test/NCA/nca_gost2022_test.cer"))) {
+        ca = (X509Certificate) factory.generateCertificate(certificate);
+      }
+      var status = OCSPUtil.verify(signing.getCertificateChain().get(0), ca,
+          new URL("http://test.pki.gov.kz/ocsp/"), KalkanHashAlgorithm.HASH_SHA1,
+          KNCAServiceRequestMethod.POST, true, CmsVerifier.PROVIDER);
+      System.out.println("{\"testOcspResponded\":true,\"utilityStatus\":\"" +
+          (status == null ? "good" : status.getClass().getSimpleName()) +
+          "\",\"authorizationUsable\":false}");
+      return;
+    }
+    byte[] bytes = Base64.getDecoder().decode(input.readLine());
+    phase = "create_cms";
+    var signed = CMSUtil.createCAdES(signing, bytes, args[1].equals("attached"), CmsVerifier.PROVIDER);
+    if (args[1].equals("multi")) {
+      var one = signed.getSignerInfos().getSigners().iterator().next();
+      signed = CMSSignedData.replaceSigners(signed, new SignerInformationStore(List.of(one, one)));
+    }
+    byte[] cms = signed.getEncoded();
+    if (args[1].equals("crypto-checks")) {
+      CMSUtil.verifyCMS(cms, bytes, CmsVerifier.PROVIDER);
+      rejects(() -> CMSUtil.verifyCMS(cms, "altered".getBytes(StandardCharsets.UTF_8), CmsVerifier.PROVIDER));
+      CmsVerifier.check(CMSUtil.parseAsCMS(cms).getSignedContent() == null);
+      CmsVerifier.check(CMSUtil.getSignerInformations(CMSUtil.parseAsCMS(cms)).size() == 1);
+      System.out.println("{\"cryptoChecks\":4,\"passed\":true,\"signatureOnly\":true}");
+      return;
+    }
+    if (!args[1].equals("checks")) {
+      System.out.println(Base64.getEncoder().encodeToString(cms));
+      return;
+    }
+    phase = "assets";
+    var crlDirectory = Path.of(args[2]);
+    var assets = CmsVerifier.assets(sdk, crlDirectory, new Date());
+    phase = "exact_bytes";
+    CmsVerifier.verify(cms, bytes, assets, new Date());
+    phase = "altered_bytes";
+    rejects(() -> CmsVerifier.verify(cms, "altered".getBytes(StandardCharsets.UTF_8), assets, new Date()));
+    phase = "stale_status";
+    rejects(() -> CmsVerifier.assets(sdk, crlDirectory, new Date(assets.validUntil() + 1)));
+    phase = "missing_assets";
+    rejects(() -> CmsVerifier.assets(sdk, crlDirectory.resolve("missing-test-assets"), new Date()));
+    phase = "missing_crl";
+    var withoutCrl = new CmsVerifier.Assets(assets.root(), assets.ca(), List.of(), assets.validUntil());
+    rejects(() -> CmsVerifier.verify(cms, bytes, withoutCrl, new Date()));
+    phase = "expired_signer";
+    var distantStatus = new CmsVerifier.Assets(assets.root(), assets.ca(), assets.crls(), Long.MAX_VALUE);
+    rejects(() -> CmsVerifier.verify(cms, bytes, distantStatus, new Date(4_102_444_800_000L)));
+    System.out.println("{\"sdkChecks\":6,\"passed\":true}");
+  }
+}
