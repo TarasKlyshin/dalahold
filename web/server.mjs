@@ -1,5 +1,5 @@
 // Local unsigned-draft demo. This is not an NCA verifier or a payment API.
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -8,6 +8,10 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { normalizeMarkerInput } from './markers.mjs';
 import { fingerprintDraftTerms } from './terms.mjs';
+import { TestDocuments } from './test-documents.mjs';
+import { TermsEvidence } from '../nca/terms-evidence.mjs';
+import { createTestWorkspaceHandler } from './test-workspace-http.mjs';
+import { preparePrivateTestDatabase } from './private-test-store.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const assets = new Map([
@@ -81,12 +85,17 @@ async function readMarker(req) {
   }
 }
 
-export function createDraftServer({ dbPath }) {
+export function createDraftServer({ dbPath, testWorkspace = null }) {
   if (typeof dbPath !== 'string' || !dbPath) throw new Error('dbPath required');
-  mkdirSync(dirname(dbPath), { recursive: true });
+  if (testWorkspace) dbPath = preparePrivateTestDatabase(dbPath);
+  else mkdirSync(dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
+  const identityKey = testWorkspace ? randomBytes(32) : null;
+  try {
   db.exec(`
-    PRAGMA journal_mode = WAL;
+    PRAGMA journal_mode = ${testWorkspace ? 'DELETE' : 'WAL'};
+    PRAGMA synchronous = FULL;
+    PRAGMA mmap_size = 0;
     PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS drafts (
       id TEXT PRIMARY KEY,
@@ -227,6 +236,48 @@ export function createDraftServer({ dbPath }) {
     }
   }
 
+  let workspace, documents, terms;
+  let sdkActive = 0;
+  const runSdk = async fn => {
+    if (sdkActive >= 2) throw Object.assign(new Error('verifier_busy'), { status: 503 });
+    sdkActive++;
+    try { return await fn(); } finally { sdkActive--; }
+  };
+  if (testWorkspace) {
+      documents = new TestDocuments({ db });
+      const readSnapshot = dealId => {
+        const row = find.get(dealId);
+        if (!row) throw new Error('terms_deal_not_found');
+        const { version, scenario, quantity, amount, date } = row;
+        const archived = db.prepare('SELECT version,scenario,quantity,amount,date FROM draft_versions WHERE deal_id=? AND version=?').get(dealId,version);
+        if (!archived || ['version','scenario','quantity','amount','date'].some(field => archived[field] !== row[field]))
+          throw Object.assign(new Error('evidence_corrupt'), { status:409 });
+        const terms = { dealId, version, scenario, quantity, amount, date };
+        return { terms, termsFingerprint:fingerprintDraftTerms(terms), documents:documents.manifest(dealId,version) };
+      };
+      const sdk = testWorkspace.sdk;
+      const inspect = async () => sdk?.statusSource === 'test_ocsp' ? runSdk(() => sdk.inspect()) : null;
+      terms = new TermsEvidence({ db, readSnapshot, verify:async (bytes,cms) => {
+        if (sdk?.statusSource !== 'test_ocsp') return { verified:false };
+        const result = await runSdk(() => sdk.verifyIdentity(bytes,cms,identityKey));
+        // Only classification is needed. Opaque subject IDs are NOT persisted or
+        // exposed, and this process-local mapping key creates no account binding.
+        return { verified:result.verified, statusSource:result.statusSource,
+          certificateDigest:result.certificateDigest, validUntil:result.validUntil,
+          personal: result.verified === true && result.identity?.schema === 'nca_test_subject_v1' &&
+            result.identity.organizationId === null && typeof result.identity.personId === 'string' &&
+            /^person:[a-f0-9]{64}$/.test(result.identity.personId) };
+      } });
+      workspace = createTestWorkspaceHandler({ documents, terms, readSnapshot,
+        readDeal:dealId => withFingerprint(find.get(dealId)), inspect,
+        fixtureProvider:testWorkspace.fixtureProvider, bodyTimeoutMs:testWorkspace.bodyTimeoutMs });
+  }
+  const workspaceAssets = new Map([
+    ['/test-workspace/', ['web/test-workspace.html','text/html; charset=utf-8']],
+    ['/test-workspace/client.mjs', ['web/test-workspace-client.mjs','text/javascript; charset=utf-8']],
+    ['/test-workspace/styles.css', ['web/test-workspace.css','text/css; charset=utf-8']],
+    ['/nca-client.mjs', ['nca/client.mjs','text/javascript; charset=utf-8']],
+  ]);
   const server = createServer(async (req, res) => {
     const expectedHost = `127.0.0.1:${server.address()?.port}`;
     if (req.headers.host !== expectedHost ||
@@ -236,6 +287,14 @@ export function createDraftServer({ dbPath }) {
     }
     const pathname = new URL(req.url, `http://${expectedHost}`).pathname;
     try {
+      if (workspace && await workspace.handle(req,res,pathname,expectedHost)) return;
+      if (workspace && req.method === 'GET' && workspaceAssets.has(pathname)) {
+        const [name,contentType] = workspaceAssets.get(pathname);
+        const body = await readFile(resolve(root,name));
+        res.writeHead(200,{'Content-Type':contentType,'Cache-Control':'no-store',
+          'X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' wss://127.0.0.1:13579; object-src 'none'; frame-ancestors 'none'; base-uri 'none'"});
+        res.end(body); return;
+      }
       if (pathname === '/api/deals' && req.method === 'GET') {
         send(res, 200, { deals: list.all().map((deal) => withFingerprint(deal)) });
       } else if (pathname === '/api/deals' && req.method === 'POST') {
@@ -283,7 +342,8 @@ export function createDraftServer({ dbPath }) {
         send(res, deal ? 200 : 404, deal ? { deal: withFingerprint(deal) } : { error: 'not_found' });
       } else if (req.method === 'GET' && assets.has(pathname)) {
         const [name, contentType] = assets.get(pathname);
-        const body = await readFile(resolve(root, 'prototype', name));
+        let body = await readFile(resolve(root, 'prototype', name));
+        if (workspace && name === 'index.html') body = Buffer.from(body.toString('utf8').replace('<body>','<body data-test-workspace="enabled">'));
         res.writeHead(200, {
           'Content-Type': contentType, 'Cache-Control': 'no-store',
           'X-Content-Type-Options': 'nosniff',
@@ -299,8 +359,18 @@ export function createDraftServer({ dbPath }) {
       else res.end();
     }
   });
-  server.on('close', () => db.close());
+  server.workspaceShutdown = () => workspace?.close();
+  let resolveResources;
+  server.resourcesClosed = new Promise(resolve => { resolveResources = resolve; });
+  server.on('close', async () => {
+    try { await workspace?.close(); } finally { identityKey?.fill(0); db.close(); resolveResources(); }
+  });
   return server;
+  } catch (error) {
+    identityKey?.fill(0);
+    db.close();
+    throw error;
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

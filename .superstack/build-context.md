@@ -371,3 +371,21 @@ The dated handoffs below preserve earlier checkpoints, not current gate status.
   `.planning/spikes/016-browser-personal-test/UAT.md`. Spike016 remains PARTIAL:
   automated full UI QA/real-cookie observation blocked; eligible genuine renewal
   pair still missing; no login/powers/wallet/payment/devnet enabled.
+
+## 2026-10-02 independent TEST deal workspace
+
+- Baseline clean `main`3e98e7c. User authorized all three local steps with
+  ProofPilot: read-only offline fixture evidence, exact version/manifest personal
+  TEST CMS and anonymized TEST text storage. See Spike018 for measured gates.
+- Final enumerated278 Node +7 offline Solana pass. New genuine bundled TEST
+  SDK/HTTP gate passes exact receipt/history/download and negative cases.
+- Focused code review's missing-key/history-growth/startup-leak findings resolved
+  with failing-before regressions; not full production/Claude review.
+- Independent loopback4176 uses NEW `.local/test-deal-workspace` and SQLite backup,
+  not the retained personal registry/root or previous servers. Actual browser
+  upload/download/hash, exact intent, close/expiry and post-restart observation
+  pass. One anonymized96-byte text, one unsigned intent, zero terms receipts;
+  six synthetic offline decisions. Browser file transport had long service delays.
+- Manual NCALayer terms UAT remains open. An anonymous TEST session and
+  `test_terms_evidence_only` do not grant roles/login/powers/deal/payment/chain
+  authority. Genuine renewal/two-party and production gates remain separate.

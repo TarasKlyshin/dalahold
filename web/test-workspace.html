@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DalaHold — локальный TEST-кабинет</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/test-workspace/styles.css">
+  <script type="module" src="/test-workspace/client.mjs"></script>
+</head>
+<body>
+  <a class="tw-skip" href="#tw-workspace">К TEST-кабинету</a>
+  <header class="tw-header"><a href="/">← Черновики DalaHold</a><span>ТОЛЬКО ЛОКАЛЬНЫЙ TEST</span></header>
+  <main id="tw-workspace" class="tw-workspace" aria-busy="false">
+    <h1>Условия, документы и TEST-квитанции</h1>
+    <p class="tw-boundary">Этот кабинет не выполняет вход, не подтверждает роли или корпоративные полномочия и не разрешает кошелёк, платёж или сделку. Используй только тестовые и обезличенные данные.</p>
+    <p id="tw-result" class="tw-result" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Загружаем локальную TEST-сессию…</p>
+    <section class="tw-panel" aria-labelledby="tw-session-heading">
+      <h2 id="tw-session-heading">Локальная сессия</h2>
+      <p id="tw-session-expiry"></p><p id="tw-sdk"></p>
+      <div class="tw-actions"><button id="tw-refresh" type="button" class="outline-button">Обновить сводку</button><button id="tw-close" type="button" class="quiet-button" disabled>Закрыть TEST-сессию</button><a id="tw-new-session" href="/test-workspace/" hidden>Открыть новую TEST-сессию</a></div>
+      <p class="tw-note">Закрытие или истечение сессии не отменяет уже сохранённую операцию. Если ответ потерян, после завершения сессии потребуется защищённый readback оператора.</p>
+    </section>
+    <section class="tw-panel" aria-labelledby="tw-deal-heading">
+      <h2 id="tw-deal-heading">Сохранённый черновик</h2>
+      <label for="tw-deal">Выбрать черновик</label><select id="tw-deal" disabled><option value="">Нет выбранного черновика</option></select>
+      <p id="tw-deal-summary">Черновик не выбран.</p><code id="tw-fingerprint" class="tw-code"></code>
+    </section>
+    <section class="tw-panel" aria-labelledby="tw-documents-heading">
+      <h2 id="tw-documents-heading">Тестовые текстовые документы</h2>
+      <p>Содержимое выбранного файла будет сохранено локально и связано с текущей версией условий. Подходит только UTF-8 <code>.txt</code>, до 256 КиБ. Название файла не передаётся.</p>
+      <label for="tw-consent" class="tw-check"><input id="tw-consent" type="checkbox"> Подтверждаю: файл тестовый или обезличенный, согласен сохранить его содержимое локально.</label>
+      <div class="tw-form"><div><label for="tw-file">Текстовый файл</label><input id="tw-file" type="file" accept=".txt,text/plain" disabled></div><div><label for="tw-category">Назначение документа</label><select id="tw-category" disabled><option value="contract">Условия / договор</option><option value="delivery">Передача</option><option value="quality">Качество</option><option value="other">Другое</option></select></div></div>
+      <div class="tw-actions"><button id="tw-upload" type="button" class="outline-button" disabled>Сохранить тестовый документ</button><button id="tw-upload-retry" type="button" class="outline-button" disabled>Повторить тот же документ</button></div>
+      <ul id="tw-documents" class="tw-documents"></ul>
+    </section>
+    <section class="tw-panel" aria-labelledby="tw-signing-heading">
+      <h2 id="tw-signing-heading">Одна личная TEST-подпись точного снимка</h2>
+      <p>NCALayer подпишет условия и SHA-256 документов одной личной TEST CMS. Это свидетельство подписи, а не предложение, согласие второй стороны или разрешение операции. Пароль вводится только в окне NCALayer.</p>
+      <div class="tw-actions"><button id="tw-create" type="button" class="outline-button" disabled>Подготовить точный TEST-снимок</button><button id="tw-sign" type="button" class="primary-button" disabled>Подписать в NCALayer</button><button id="tw-retry" type="button" class="outline-button" disabled>Повторить ту же CMS</button></div>
+      <div id="tw-intent" hidden><p id="tw-intent-expiry"></p><p>Точные подписываемые байты:</p><pre id="tw-exact-bytes" class="tw-pre"></pre><code id="tw-intent-hash" class="tw-code"></code></div>
+      <div id="tw-receipt" hidden><h3 id="tw-receipt-kind">TEST-квитанция</h3><p id="tw-receipt-note"></p><pre id="tw-receipt-bytes" class="tw-pre"></pre></div>
+    </section>
+    <section class="tw-panel" aria-labelledby="tw-evidence-heading">
+      <h2 id="tw-evidence-heading">Сводка сохранённых свидетельств</h2>
+      <p>Личные TEST CMS и офлайн-решения локальных тестовых ключей показаны отдельно. Хэши квитанций не являются юридическими документами или проверенными файлами.</p>
+      <h3>Личные TEST-подписи</h3><pre id="tw-signatures" class="tw-pre">Сводка ещё не загружена.</pre>
+      <h3>Отдельный офлайн-сценарий тестовых ключей</h3><pre id="tw-offline" class="tw-pre">Сводка ещё не загружена.</pre>
+      <button id="tw-export" type="button" class="outline-button" disabled>Экспортировать загруженную TEST-сводку JSON</button>
+    </section>
+  </main>
+</body>
+</html>

@@ -18,6 +18,15 @@ refusal and one-receipt retry. Genuine bundled SDK signatures prove replacement
 negatives only. Positive genuine renewal still requires a second eligible personal
 TEST certificate; neither browser QA nor business access is accepted.
 
+An independent [local TEST deal workspace](.planning/spikes/018-test-deal-workspace/README.md)
+adds a read-only operator-prepared six-event offline fixture, bounded anonymized
+UTF-8 text-file storage/downloads and a separate personal TEST CMS receipt over
+one exact terms version plus the complete document-digest manifest. Its receipt
+does not grant a buyer/seller role, approve a deal or establish file authenticity.
+The existing personal binding registry is not used by this workspace. Its
+current test/runtime/UI acceptance results are recorded in Spike 018; no public
+deployment, payment or chain transaction follows from this slice.
+
 ## The problem
 
 Farmers and buyers can agree on terms across messages and documents, then disagree about what was accepted, delivered, or paid. DalaHold is exploring a shared, versioned deal record that makes each party's statements and supporting evidence visible without presenting a photo or an on-chain record as proof of physical delivery.
@@ -45,6 +54,7 @@ The first planned vertical is a livestock deal. The grain/oilseed alternative re
 - [Spike 014](.planning/spikes/014-personal-binding-intents/README.md) — protected TEST mapping key, dedicated personal enrollment/replacement intents, atomic replay/retirement and backup/restart; genuine personal enrollment passes, positive renewal is synthetic only, no HTTP login or wallet.
 - [Spike 015](.planning/spikes/015-retained-binding-checkpoint/README.md) — retained local TEST checkpoint rejects stale binding backups/clones; joint-write rollback and current restore checks pass. Not encrypted custody, full-host anti-rollback or enabled browser login.
 - [Spike 016](.planning/spikes/016-browser-personal-test/README.md) — opt-in browser personal TEST enrollment with server-issued session/CSRF and limits. SDK HTTP/negatives pass; narrow manual UAT human-confirmed with persisted/no-duplicate evidence and revision2 backup. Not identity login or corporate powers; agent UI QA and genuine renewal remain open.
+- [Spike 018](.planning/spikes/018-test-deal-workspace/README.md) — independent TEST terms/document workspace and read-only fixture evidence; exact manifest-bound personal CMS, not two-party approval or participant access.
 - [Spike 011](.planning/spikes/011-ncalayer-roundtrip/README.md) — historical browser/API stand and corrected CRL-pair gate; later TEST OCSP acceptance is recorded in Spike 012.
 - [Offline deal workflow](workflow/README.md) — test-key transfer fixture, persistent decision policy, frozen terms and a local signed-byte bridge with an internal demo record; not a browser API, NCA integration or real payment.
 - [Spike 009](.planning/spikes/009-immutable-terms-evidence/README.md) — local snapshot, same-file freshness and honestly labelled metadata/receipt record; offline only.

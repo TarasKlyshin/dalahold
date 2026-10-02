@@ -1,0 +1,27 @@
+[hidden] { display: none !important; }
+.tw-header { max-width: 1060px; margin: auto; padding: 22px 24px; display: flex; align-items: center; justify-content: space-between; gap: 15px; border-bottom: 1px solid var(--line); }
+.tw-header a, .tw-workspace a { color: var(--forest); text-underline-offset: 3px; }
+.tw-header span { font-size: 11px; font-weight: 800; letter-spacing: .07em; color: #855030; }
+.tw-workspace { max-width: 1060px; margin: auto; padding: 24px 24px 60px; }
+.tw-workspace h1 { font: 400 clamp(25px, 4vw, 36px)/1.3 var(--display); margin: 8px 0 16px; }
+.tw-workspace h2 { font: 400 23px/1.4 var(--display); margin: 0 0 16px; }
+.tw-workspace h3 { font-size: 15px; margin-top: 22px; }
+.tw-boundary { max-width: 850px; }
+.tw-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 24px; margin-top: 20px; }
+.tw-result { padding: 15px; border-left: 3px solid var(--forest); background: var(--sage); overflow-wrap: anywhere; }
+.tw-result.error { border-left-color: var(--danger); background: #f4e7e0; }
+.tw-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0; }
+.tw-workspace label { display: block; font-weight: 700; margin: 0 0 7px; }
+.tw-workspace select, .tw-workspace input[type="file"] { width: 100%; min-height: 44px; padding: 10px; background: var(--paper); color: var(--ink); border: 1px solid #a7b2a6; border-radius: 5px; }
+.tw-workspace input[type="checkbox"] { width: 20px; height: 20px; flex: 0 0 auto; }
+.tw-check { display: flex !important; align-items: flex-start; gap: 10px; padding: 10px 0; }
+.tw-form { display: grid; grid-template-columns: 1.5fr 1fr; gap: 18px; margin-top: 15px; }
+.tw-code { display: block; overflow-wrap: anywhere; font-size: 12px; }
+.tw-pre { margin: 12px 0; padding: 16px; border: 1px solid var(--line); border-radius: 5px; background: #f3f3e9; font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tw-documents { padding-left: 22px; }
+.tw-documents li { padding: 9px 0; overflow-wrap: anywhere; }
+.tw-documents a { display: inline-block; min-height: 44px; padding: 10px 0; }
+.tw-note { font-size: 12px; color: #536658; }
+.tw-skip { position: absolute; left: 18px; top: -80px; z-index: 10; background: var(--panel); padding: 12px; color: var(--forest); }
+.tw-skip:focus { top: 8px; }
+@media (max-width: 650px) { .tw-header { align-items: flex-start; flex-direction: column; padding: 18px; } .tw-workspace { padding: 18px 14px 40px; } .tw-panel { padding: 18px 14px; } .tw-form { grid-template-columns: 1fr; } .tw-actions > button { width: 100%; white-space: normal; } .tw-pre { padding: 12px; } }

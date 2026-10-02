@@ -461,6 +461,11 @@ function renderReputation() {
 }
 
 function renderDraftVersions() {
+  const workspaceLink = $("testWorkspaceLink");
+  if (workspaceLink && document.body?.dataset.testWorkspace === "enabled") {
+    workspaceLink.hidden = false;
+    workspaceLink.href = state.activeDealId ? `/test-workspace/?dealId=${state.activeDealId}` : "/test-workspace/";
+  }
   $("draftHistory").hidden = !state.activeDealId;
   $("termsFingerprint").textContent = savedDeal()?.termsFingerprint || "—";
   const list = $("draftVersions");
