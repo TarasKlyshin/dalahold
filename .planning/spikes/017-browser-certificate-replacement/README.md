@@ -155,6 +155,15 @@ must not enter chat, Git, logs or evidence.
 
 ## Open gates
 
+Follow-up on 3 October 2026: [sanitized certificate-pair evidence](CERTIFICATE_PAIR.md)
+confirms that the current `valid`/`revoked` personal pair is same-person and
+distinct, with good/revoked strict TEST OCSP respectively. Old credential
+revocation does not prevent replacement when its historical binding is authentic
+and the new credential is freshly eligible. The actual retained registry binds
+the good `valid` digest, not the revoked one; no historical state is rewritten.
+Explicit browser permission was received, but the service again failed its
+mandatory admin-policy verification before navigation. No UI workaround/pass.
+
 The actual SDK inventory contains four personal leaf certificates of one test
 person: two expired in October2025, one current accepted by strict TEST OCSP,
 and one current but OCSP-revoked. Each container has one leaf, not a hidden second

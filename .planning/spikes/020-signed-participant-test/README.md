@@ -81,10 +81,19 @@ deals/events/bindings/intents, directory 700 and file 600. Memo configuration is
 absent/disabled. This is backend readiness, not a browser or signing UAT.
 
 Browser service previously denied 4177. Renewed permission was requested but not
-received; no alternative browser/port/headless workaround was used. 4178 is the
+received during that implementation run; no alternative browser/port/headless workaround was used. 4178 is the
 new signed backend slice, not a way to bypass that decision. Real-browser
 interaction, manual NCALayer enrollment, genuine two-person signing and
 same-person certificate replacement remain open. Verdict stays PARTIAL.
+
+Follow-up on 3 October: human permission is now explicit, but the attempted
+4177 navigation again failed because the browser service could not verify the
+admin-enforced policy. No bypass was attempted. The SDK valid/revoked personal
+pair is confirmed same-person/distinct; it proves revoked-key refusal, not a
+second counterparty. Renewal does not require both certificates to be good now,
+but revoked-old → valid-new needs authentic prior enrollment of the old digest.
+The retained operator binding currently uses `valid`, not `revoked`. Details:
+[certificate-pair evidence](../017-browser-certificate-replacement/CERTIFICATE_PAIR.md).
 
 ## Reproduce automated gates
 

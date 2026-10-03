@@ -34,10 +34,21 @@ it is for genuine renewal in Spike017, not the second counterparty. This stand
 pins certificate/epoch0 and refuses automatic rebind. Full technical-prototype
 acceptance requires both tests, not one certificate selected twice.
 
+Clarification from the current SDK pair: `valid` and `revoked` belong to the
+same test person. A revoked old credential need not become good again for
+replacement, provided its historical binding was genuinely accepted before
+revocation and the new credential passes fresh verification. Our retained
+registry instead binds the currently good `valid` digest. No historical revoked
+binding is fabricated; its actual rejection and genuine positive renewal remain
+different tests. This pair cannot serve as two independent counterparties.
+
 Memo is separately disabled unless the operator configures a stable devnet
 fee-payer address. Its signed operation preview must explicitly say devnet,
 fixed Memo program and fee ceiling; it is not a payment or permission inferred
 from agreement. The signing cabinet has no broadcast or raw-wire endpoint.
 
-Browser automation was previously denied. Manual feedback, authorized browser
-interaction, genuine SDK checks and model tests must be recorded separately.
+Browser automation was previously denied. The human now authorized a retry,
+but the service still refused because its mandatory admin-policy check was
+unavailable. Do not bypass that check with an alternate transport or port.
+Manual feedback, authorized browser interaction, genuine SDK checks and model
+tests must be recorded separately.
