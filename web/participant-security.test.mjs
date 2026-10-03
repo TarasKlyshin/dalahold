@@ -98,3 +98,58 @@ test('read-only deal refuses a journal that attributes seller offer to buyer', t
   finally { db.close(); }
   assert.throws(() => store.getDeal(seller.id, deal.id), error => error.code === 'store_corrupt');
 });
+
+test('HTTP expiry during feedback persistence rolls back review and retry receipt together', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dalahold-feedback-security-'));
+  const dbPath = join(directory, 'participants.sqlite');
+  let clock = 1000000, expireDuringWrite = false, expiresAt;
+  const store = new ParticipantStore({ dbPath, now() {
+    if (expireDuringWrite) clock = expiresAt;
+    return clock;
+  } });
+  const seller = store.register().participant, buyer = store.register();
+  let deal = store.createDeal(seller.id, { requestId: randomUUID(), creatorRole: 'seller',
+    scenario: 'grain', quantity: 20, amount: 200000, date: '2026-10-03' });
+  const invite = store.createInvitation(seller.id, deal.id, { expectedVersion: 1, participantId: buyer.participant.id });
+  store.claimInvitation(buyer.participant.id, { code: invite.code });
+  for (const [actor, action] of [[seller.id, 'offer'], [buyer.participant.id, 'agree'], [seller.id, 'handover'], [buyer.participant.id, 'accept']]) {
+    deal = store.getDeal(actor, deal.id);
+    deal = store.action(actor, deal.id, { requestId: randomUUID(), action, expectedVersion: deal.version,
+      expectedStateRevision: deal.stateRevision, snapshotHash: deal.snapshotHash }).deal;
+  }
+  const server = createParticipantServer({ store, now: () => clock });
+  t.after(async () => {
+    server.stopParticipantSessions(); await new Promise(resolve => server.close(resolve));
+    store.close(); rmSync(directory, { recursive: true, force: true });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  let cookie = '', csrf;
+  async function call(path, input) {
+    const response = await fetch(origin + path, { method: input === undefined ? 'GET' : 'POST',
+      headers: { ...(cookie ? { Cookie: cookie } : {}), ...(input === undefined ? {} : {
+        Origin: origin, 'Content-Type': 'application/json', 'X-DalaHold-CSRF': csrf }) },
+      ...(input === undefined ? {} : { body: JSON.stringify(input) }) });
+    if (response.headers.get('set-cookie')) cookie = response.headers.get('set-cookie').split(';')[0];
+    const data = await response.json(); if (data.csrfToken) csrf = data.csrfToken;
+    return { status: response.status, data };
+  }
+  await call(API + '/session');
+  const login = await call(API + '/session/login', { accessCode: buyer.accessCode });
+  assert.equal(login.status, 200); expiresAt = login.data.expiresAt;
+  const input = { requestId: randomUUID(), expectedVersion: deal.version, expectedStateRevision: deal.stateRevision,
+    snapshotHash: deal.snapshotHash, score: 5 };
+  expireDuringWrite = true;
+  assert.equal((await call(`${API}/deals/${deal.id}/reviews`, input)).status, 401);
+  expireDuringWrite = false;
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    assert.equal(db.prepare('SELECT count(*) AS n FROM participant_reviews').get().n, 0);
+    assert.equal(db.prepare("SELECT count(*) AS n FROM participant_requests WHERE kind='review'").get().n, 0);
+  } finally { db.close(); }
+  await call(API + '/session');
+  assert.equal((await call(API + '/session/login', { accessCode: buyer.accessCode })).status, 200);
+  const retry = await call(`${API}/deals/${deal.id}/reviews`, input);
+  assert.equal(retry.status, 201); assert.equal(retry.data.historical, false);
+  assert.equal(store.listReviews(seller.id, deal.id).length, 1);
+});

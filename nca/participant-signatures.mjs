@@ -473,6 +473,13 @@ export class ParticipantSignatures {
     if (!accepted.event || !equal(event, accepted.event)) fail('signature_receipt_changed');
     return freeze(accepted.event);
   }
+  // Export only an already accepted deal-action receipt after checking its
+  // private record/MAC and exact event link. No CMS, subject or fresh authority.
+  receiptForEvent(value) {
+    const event = this.validateEvent(value);
+    const row = this.#db.prepare('SELECT * FROM participant_signature_intents WHERE receipt_id=?').get(event.authorization.receiptId);
+    return freeze(this.#accepted(row).receipt);
+  }
   #row(actorId, sessionHash, id) {
     return this.#db.prepare('SELECT * FROM participant_signature_intents WHERE id=? AND actor_id=? AND session_hash=?').get(id, actorId, sessionHash);
   }

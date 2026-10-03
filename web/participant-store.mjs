@@ -8,11 +8,14 @@ import { preparePrivateTestDatabase } from './private-test-store.mjs';
 import { canonicalDraftTerms, fingerprintDraftTerms } from './terms.mjs';
 import { TestDocumentError, TestDocuments, TEST_DOCUMENT_MAX_BYTES } from './test-documents.mjs';
 import { ParticipantSignatures } from '../nca/participant-signatures.mjs';
+import { buildParticipantEvidence } from './participant-evidence.mjs';
 
 export const PARTICIPANT_LIMIT = 100;
 export const PARTICIPANT_DEAL_LIMIT = 100;
 export const PARTICIPANT_REQUEST_LIMIT = 2000;
 export const PARTICIPANT_INVITATION_LIFETIME_MS = 15 * 60 * 1000;
+export const PARTICIPANT_REPUTATION_SCOPE = 'local_test_role_reputation_only';
+export const PARTICIPANT_REVIEW_SOURCE = 'unsigned_test_participant_review';
 const SCOPE = 'local_test_participant_statements_only';
 const SOURCE = 'unsigned_test_participant_statement';
 const STORE_KIND = 'dalahold.local-test-participants.v1';
@@ -37,6 +40,7 @@ const STATUS = {
   idempotency_conflict: 409, store_corrupt: 409, incompatible_store: 409,
   participant_limit: 413, deal_limit: 413, request_limit: 413,
   signature_required: 403,
+  review_not_allowed: 409, review_already_exists: 409,
 };
 
 export class ParticipantStoreError extends Error {
@@ -169,6 +173,18 @@ export class ParticipantStore {
             kind TEXT NOT NULL, deal_id TEXT NOT NULL REFERENCES participant_deals(id),
             payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64), receipt_json TEXT NOT NULL,
             created_at INTEGER NOT NULL CHECK (created_at >= 0)
+          ) STRICT;
+          CREATE TABLE IF NOT EXISTS participant_reviews (
+            id TEXT PRIMARY KEY, deal_id TEXT NOT NULL REFERENCES participant_deals(id),
+            author_id TEXT NOT NULL REFERENCES participants(id), target_id TEXT NOT NULL REFERENCES participants(id),
+            target_role TEXT NOT NULL CHECK (target_role IN ('seller', 'buyer')),
+            score INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+            accepted_event_id TEXT NOT NULL REFERENCES participant_events(id),
+            terms_version INTEGER NOT NULL CHECK (terms_version >= 1),
+            state_revision INTEGER NOT NULL CHECK (state_revision >= 1),
+            snapshot_hash TEXT NOT NULL CHECK (length(snapshot_hash) = 64),
+            created_at INTEGER NOT NULL CHECK (created_at >= 0),
+            UNIQUE (deal_id, author_id), CHECK (author_id <> target_id)
           ) STRICT;
         `);
         db.prepare('INSERT OR IGNORE INTO participant_store_meta VALUES (1, ?)').run(kind);
@@ -477,6 +493,126 @@ export class ParticipantStore {
     }, true, () => { if (expiresAt !== undefined && this.#time() >= expiresAt) fail('not_found'); });
   }
   getDeal(actorId, dealId) { return this.#transaction(() => this.#deal(actorId, dealId)); }
+  getEvidencePackage(actorId, dealId) {
+    return this.#transaction(() => {
+      // All versions, private file bytes and protected receipt links are read
+      // in the same SQLite snapshot, only after the membership check.
+      const deal = this.#deal(actorId, dealId);
+      const archived = this.#db.prepare('SELECT * FROM draft_versions WHERE deal_id=? ORDER BY version LIMIT 2001').all(dealId);
+      if (archived.length > 2000 || archived.length !== deal.version) fail('store_corrupt');
+      const versions = archived.map(row => {
+        let normalized;
+        try { normalized = terms(row); } catch { fail('store_corrupt'); }
+        return { version: row.version, ...normalized,
+          termsFingerprint: fingerprintDraftTerms({ dealId, version: row.version, ...normalized }) };
+      });
+      const documents = deal.documentHistory.map(document => {
+        const file = this.#documents.read(dealId, document.id);
+        return { ...file.document, contentBase64: file.bytes.toString('base64') };
+      });
+      const receipts = this.#signed ? deal.events.map(event => this.#signing().receiptForEvent(event)) : [];
+      return buildParticipantEvidence({ exportedAt: this.#time(), deal, versions, documents, receipts });
+    });
+  }
+  #reviewPayload(value) {
+    return { expectedVersion: value.termsVersion, expectedStateRevision: value.stateRevision,
+      snapshotHash: value.snapshotHash, score: value.score };
+  }
+  #reviews(deal) {
+    const rows = this.#db.prepare('SELECT * FROM participant_reviews WHERE deal_id=? ORDER BY created_at,id').all(deal.id);
+    const requests = this.#db.prepare("SELECT * FROM participant_requests WHERE deal_id=? AND kind='review'").all(deal.id);
+    if (rows.length > 2 || requests.length !== rows.length || new Set(rows.map(row => row.author_id)).size !== rows.length) fail('store_corrupt');
+    const terminal = deal.events.at(-1);
+    if (rows.length && (deal.state !== 'accepted' || terminal?.action !== 'accept' || terminal.stateTo !== 'accepted')) fail('store_corrupt');
+    const seenRequests = new Set();
+    return rows.map(row => {
+      const author = deal.participants.find(party => party.id === row.author_id);
+      const target = deal.participants.find(party => party.id === row.target_id);
+      if (!uuid(row.id) || !author || !target || author.id === target.id || target.role !== row.target_role ||
+          !integer(row.score) || row.score > 5 || row.accepted_event_id !== terminal.id ||
+          row.terms_version !== deal.version || row.state_revision !== deal.stateRevision ||
+          row.snapshot_hash !== deal.snapshotHash || !integer(row.created_at, 0) || row.created_at < terminal.createdAt) fail('store_corrupt');
+      const review = { id: row.id, dealId: deal.id, authorId: author.id, authorRole: author.role,
+        targetId: target.id, targetRole: target.role, score: row.score, termsVersion: row.terms_version,
+        stateRevision: row.state_revision, snapshotHash: row.snapshot_hash, acceptedEventId: row.accepted_event_id,
+        createdAt: row.created_at, source: PARTICIPANT_REVIEW_SOURCE, scope: PARTICIPANT_REPUTATION_SCOPE, dealScope: this.scope };
+      // A review and its durable actor/payload-bound receipt must survive together.
+      // This detects bounded damage, not a hostile owner rewriting the entire DB.
+      const matching = requests.filter(requestRow => {
+        let receipt;
+        try { receipt = exact(parse(requestRow.receipt_json), ['reviewId']); } catch { fail('store_corrupt'); }
+        return receipt.reviewId === review.id;
+      });
+      const saved = matching[0];
+      if (matching.length !== 1 || seenRequests.has(saved.request_id) || !uuid(saved.request_id) ||
+          saved.actor_id !== review.authorId || saved.payload_hash !== encodedHash(this.#reviewPayload(review)) ||
+          saved.created_at < review.createdAt || !integer(saved.created_at, 0)) fail('store_corrupt');
+      seenRequests.add(saved.request_id);
+      return review;
+    });
+  }
+  listReviews(actorId, dealId) {
+    return this.#transaction(() => this.#reviews(this.#deal(actorId, dealId)));
+  }
+  review(actorId, dealId, value) {
+    return this.#transaction(() => {
+      // Membership comes before request detail or historical receipt lookup.
+      const deal = this.#deal(actorId, dealId);
+      const input = exact(value, ['requestId', 'expectedVersion', 'expectedStateRevision', 'snapshotHash', 'score']);
+      request(input.requestId); version(input.expectedVersion);
+      if (!integer(input.expectedStateRevision, 0) || typeof input.snapshotHash !== 'string' ||
+          !HASH.test(input.snapshotHash) || !integer(input.score) || input.score > 5) fail('invalid_request');
+      const payload = { expectedVersion: input.expectedVersion, expectedStateRevision: input.expectedStateRevision,
+        snapshotHash: input.snapshotHash, score: input.score };
+      const receipt = this.#receipt(actorId, input.requestId, 'review', dealId, payload);
+      const existing = this.#reviews(deal);
+      if (receipt) {
+        let saved;
+        try { saved = exact(receipt, ['reviewId']); } catch { fail('store_corrupt'); }
+        const review = existing.find(review => review.id === saved.reviewId && review.authorId === actorId);
+        if (!review) fail('store_corrupt');
+        return { review, historical: true };
+      }
+      if (deal.version !== input.expectedVersion) fail('stale_deal');
+      if (deal.stateRevision !== input.expectedStateRevision) fail('state_conflict');
+      if (deal.snapshotHash !== input.snapshotHash) fail('snapshot_mismatch');
+      if (deal.state !== 'accepted' || deal.participants.length !== 2) fail('review_not_allowed');
+      if (existing.some(review => review.authorId === actorId)) fail('review_already_exists');
+      const target = deal.participants.find(party => party.id !== actorId);
+      const terminal = deal.events.at(-1);
+      if (!target || terminal?.action !== 'accept') fail('store_corrupt');
+      this.#requestLimit();
+      const id = randomUUID(), createdAt = this.#time();
+      if (createdAt < terminal.createdAt) fail('store_corrupt');
+      this.#db.prepare('INSERT INTO participant_reviews VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id, dealId, actorId,
+        target.id, target.role, input.score, terminal.id, deal.version, deal.stateRevision, deal.snapshotHash, createdAt);
+      this.#remember(actorId, input.requestId, 'review', dealId, payload, { reviewId: id });
+      const review = this.#reviews(deal).find(review => review.id === id);
+      if (!review) fail('store_corrupt');
+      return { review, historical: false };
+    }, true);
+  }
+  #reputation(participantId) {
+    const participant = this.#participant(participantId);
+    const roles = { seller: { count: 0, scoreTotal: 0, average: null }, buyer: { count: 0, scoreTotal: 0, average: null } };
+    // Read memberships, not only review rows: a deleted review cannot disappear
+    // from an aggregate while its accepted request receipt still exists.
+    const memberships = this.#db.prepare('SELECT deal_id FROM participant_memberships WHERE participant_id=? ORDER BY deal_id LIMIT 101').all(participantId);
+    if (memberships.length > PARTICIPANT_DEAL_LIMIT) fail('store_corrupt');
+    for (const { deal_id: dealId } of memberships) {
+      for (const review of this.#reviews(this.#deal(participantId, dealId))) {
+        if (review.targetId !== participantId) continue;
+        const role = roles[review.targetRole]; role.count++; role.scoreTotal += review.score;
+      }
+    }
+    for (const role of Object.values(roles)) if (role.count) role.average = Number((role.scoreTotal / role.count).toFixed(2));
+    return { participant, roles, scope: PARTICIPANT_REPUTATION_SCOPE, source: PARTICIPANT_REVIEW_SOURCE,
+      dealScope: this.scope, signatureVerified: false, eligibility: 'accepted_local_test_deals_only' };
+  }
+  getReputation(actorId) { return this.#transaction(() => this.#reputation(actorId)); }
+  getDealReputation(actorId, dealId) {
+    return this.#transaction(() => this.#deal(actorId, dealId).participants.map(party => this.#reputation(party.id)));
+  }
   listDocuments(actorId, dealId) {
     return this.#transaction(() => {
       return this.#deal(actorId, dealId).documents;

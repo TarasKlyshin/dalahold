@@ -4,6 +4,7 @@ import { readFile, mkdtemp, rm, mkdir, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { performance } from 'node:perf_hooks';
 import test from 'node:test';
 import { prepareSdk, javaProcess } from './sdk.mjs';
 import { OwnerStore } from '../authority/owner-store.mjs';
@@ -11,19 +12,64 @@ import { initializePersonalBindings, PersonalBindings } from './personal-binding
 import { createProbeServer } from './server.mjs';
 import { DatabaseSync } from 'node:sqlite';
 
+const IDENTITY_TEST_BUDGET_MS = 120_000;
+
 test('opaque subject identity: genuine TEST CMS, dedicated personal binding and offline storage compatibility',
-  { skip: !process.env.NCA_SDK_ROOT, timeout: 60_000 }, async (t) => {
+  // 61 serial Java calls took 56.4/58.1 seconds in bounded complete diagnostics;
+  // the original 60-second harness cancelled twice. Match the existing terms
+  // SDK HTTP budget; every Java process retains its sdk.mjs 15-second deadline.
+  { skip: !process.env.NCA_SDK_ROOT, timeout: IDENTITY_TEST_BUDGET_MS }, async (t) => {
+    const started = performance.now(), stages = [], callTimings = {};
+    const activeCalls = new Map();
+    let stage = 'fixture_setup', stageStarted = started, callSequence = 0, preflightRejections = 0;
+    const measured = (kind, operation) => {
+      const id = ++callSequence, began = performance.now();
+      activeCalls.set(id, { kind, began });
+      let pending;
+      try { pending = operation(); }
+      catch (error) {
+        activeCalls.delete(id);
+        if (kind === 'sdk_verify_identity') preflightRejections++;
+        throw error; // malformed-key rejection must remain synchronous
+      }
+      const timing = callTimings[kind] ||= { calls: 0, totalMs: 0, maxMs: 0 };
+      timing.calls++;
+      return Promise.resolve(pending).finally(() => {
+        const elapsed = performance.now() - began;
+        timing.totalMs += elapsed; timing.maxMs = Math.max(timing.maxMs, elapsed);
+        activeCalls.delete(id);
+      });
+    };
+    const measuredJava = (kind, ...args) => measured(kind, () => javaProcess(...args));
+    const nextStage = next => {
+      const now = performance.now();
+      stages.push({ stage, elapsedMs: Math.round(now - stageStarted) });
+      stage = next; stageStarted = now;
+    };
+    t.after(() => {
+      const now = performance.now();
+      const calls = Object.fromEntries(Object.entries(callTimings).map(([kind, value]) => [kind,
+        { calls: value.calls, totalMs: Math.round(value.totalMs), maxMs: Math.round(value.maxMs) }]));
+      // Fixed labels, counts and monotonic durations only. Never log arguments,
+      // outputs, CMS, subject, password, mapping key or private pseudonyms.
+      t.diagnostic('IDENTITY_GATE_METRICS ' + JSON.stringify({ elapsedMs: Math.round(now - started),
+        outerBudgetMs: IDENTITY_TEST_BUDGET_MS, perJavaProcessDeadlineMs: 15_000,
+        javaProcessCalls: Object.values(calls).reduce((sum, value) => sum + value.calls, 0), stages,
+        currentStage: stage, currentStageElapsedMs: Math.round(now - stageStarted), calls,
+        preflightRejections, activeCalls: [...activeCalls.values()].map(call =>
+          ({ kind: call.kind, elapsedMs: Math.round(now - call.began) })) }));
+    });
     const root = process.env.NCA_SDK_ROOT;
     const java = process.env.NCA_JAVA_BIN || '/opt/homebrew/opt/openjdk@17/bin';
     const build = await mkdtemp(join(tmpdir(), 'dalahold-test-identity-'));
     t.after(() => rm(build, { recursive: true, force: true }));
     const jars = ['Java/provider/kalkancrypt-0.7.8-current.jar', 'Java/utils/knca_provider_util-0.8.5.jar']
       .map(name => join(root, name)).join(delimiter);
-    await javaProcess(join(java, 'javac'), ['-encoding', 'UTF-8', '-d', build, '-cp', jars,
+    await measuredJava('java_fixture_compile', join(java, 'javac'), ['-encoding', 'UTF-8', '-d', build, '-cp', jars,
       ...['CmsVerifier.java', 'OcspVerifier.java', 'TestCmsSigner.java', 'SubjectIdentityTest.java']
         .map(name => fileURLToPath(new URL(name, import.meta.url)))]);
     const cp = [build, jars].join(delimiter);
-    const parser = JSON.parse(await javaProcess(join(java, 'java'), ['-cp', cp, 'SubjectIdentityTest']));
+    const parser = JSON.parse(await measuredJava('java_subject_parser', join(java, 'java'), ['-cp', cp, 'SubjectIdentityTest']));
     assert.deepEqual(parser, { subjectChecks: 30, passed: true, syntheticOnly: true });
     const buffer = await readFile(join(root, 'Keys and Certs/Gost2015/README.txt'));
     const utf8 = buffer.toString('utf8');
@@ -33,23 +79,29 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
     const escapedRoot = join(build, 'sdk-with-escaped-test-keys');
     await mkdir(join(escapedRoot, 'Keys and Certs'), { recursive: true });
     await symlink(join(root, 'Keys and Certs/Gost2015'), join(escapedRoot, 'Keys and Certs/Gost2015'));
-    const escapeResult = (await javaProcess(join(java, 'java'),
+    const escapeResult = (await measuredJava('java_key_confinement', join(java, 'java'),
       ['-cp', cp, 'TestCmsSigner', escapedRoot, 'sign', join(root, 'Keys and Certs/CRL')],
       `${password}\n${Buffer.from('fixture root confinement check').toString('base64')}\n`)).trim();
     assert.ok(escapeResult.startsWith('{'), 'test-key selector must refuse a symlink outside its SDK root');
     assert.equal(JSON.parse(escapeResult).testError, 'load_test_key');
     const sign = async (bytes, mode) => {
-      const cms = (await javaProcess(join(java, 'java'),
+      const cms = (await measuredJava('java_cms_sign', join(java, 'java'),
         ['-cp', cp, 'TestCmsSigner', root, mode, join(root, 'Keys and Certs/CRL')],
         `${password}\n${bytes.toString('base64')}\n`)).trim();
       assert.ok(!cms.startsWith('{'), 'bundled fixture must produce genuine CMS');
       return Buffer.from(cms, 'base64');
     };
-    const sdk = await prepareSdk({ sdkRoot: root, javaBin: java, statusSource: 'ocsp' });
+    const runtimeSdk = await measured('sdk_compile', () => prepareSdk({ sdkRoot: root, javaBin: java, statusSource: 'ocsp' }));
+    const sdk = { statusSource: runtimeSdk.statusSource, close: () => runtimeSdk.close(),
+      inspect: (...args) => measured('sdk_inspect', () => runtimeSdk.inspect(...args)),
+      verify: (...args) => measured('sdk_verify', () => runtimeSdk.verify(...args)),
+      verifyIdentity: (...args) => measured('sdk_verify_identity', () => runtimeSdk.verifyIdentity(...args)),
+    };
     t.after(() => sdk.close());
     const key = randomBytes(32);
     t.after(() => key.fill(0));
     const bytes = Buffer.from('DalaHold TEST identity/storage compatibility only. No account, powers, grant or wallet.');
+    nextStage('profiles_and_sdk_negative_checks');
     assert.throws(() => sdk.verifyIdentity(bytes, bytes, Buffer.alloc(31)), /mapping key required/);
     const verify = async mode => sdk.verifyIdentity(bytes, await sign(bytes, mode), key);
     const first = await verify('legal-signer');
@@ -91,6 +143,7 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
       assert.notEqual(remapped.identity.personId, first.identity.personId);
     } finally { otherKey.fill(0); }
 
+    nextStage('personal_binding_library_backup_and_replay');
     // Real bundled personal TEST CMS over a dedicated enrollment intent. This
     // internal binding has no HTTP session/account, corporate powers or wallet.
     const personalDirectory = join(build, 'personal-bindings');
@@ -151,6 +204,7 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
         { receipt: enrollmentReceipt, historical: true });
     } finally { personalReopened.close(); }
 
+    nextStage('personal_http_enrollment_and_refusals');
     // Genuine SDK CMS through the opt-in HTTP enrollment boundary. No manual
     // browser/NCALayer UAT and no authenticated identity/business session.
     const browserDirectory = join(build, 'browser-personal-registry');
@@ -192,6 +246,7 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
       const repeated = await post('/api/personal-test/receipts', { intentId: intent.id, cms });
       assert.deepEqual(await repeated.json(), { ...result, historical: true });
 
+      nextStage('personal_http_replacement_refusals_and_retry');
       // A fresh anonymous TEST session may propose a replacement, but only the
       // exact eligible same-person personal CMS could commit it. These are REAL
       // bundled negative signatures, not a positive same-profile renewal pair.
@@ -246,6 +301,7 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
       await new Promise(resolve => browserServer.close(resolve)); await browserServer.resourcesClosed;
     }
 
+    nextStage('offline_owner_storage_compatibility');
     // Trusted storage fixture only: no corporate powers policy, HTTP enrolment,
     // real Solana address/key, grant signature or business operation.
     const path = join(build, 'offline-owner.sqlite');
@@ -270,5 +326,6 @@ test('opaque subject identity: genuine TEST CMS, dedicated personal binding and 
     try { assert.deepEqual(reopened.owner(owner.ownerId), { ...owner,
       certificateId: director.certificateDigest, authEpoch: 1 }); }
     finally { reopened.close(); }
+    nextStage('complete');
     t.diagnostic('Genuine TEST personal enrollment/library/current-backup/restart and opt-in HTTP enrollment/retry/close pass; genuine corporate/revoked/wrong-purpose/tampered and mismatched-candidate replacement CMS refuse through HTTP without changing binding/epoch or consuming the intent. Positive personal renewal remains synthetic only: no eligible second bundled personal certificate. No manual renewal UAT, identity login, corporate powers or wallet.');
   });

@@ -5,7 +5,7 @@ import { mkdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ParticipantStore, ParticipantStoreError } from './participant-store.mjs';
+import { ParticipantStore, ParticipantStoreError, PARTICIPANT_REPUTATION_SCOPE } from './participant-store.mjs';
 import { TestDocumentError } from './test-documents.mjs';
 import { ParticipantSignatureError } from '../nca/participant-signatures.mjs';
 
@@ -204,6 +204,9 @@ export function createParticipantServer({ store, now = Date.now, bodyTimeoutMs =
         send(res, 200, { closed: true, scope }); return;
       }
       const actorId = entry.participant.id;
+      if (path === `${PREFIX}/reputation` && req.method === 'GET') {
+        send(res, 200, { reputation: scoped(() => store.getReputation(actorId)), scope: PARTICIPANT_REPUTATION_SCOPE, dealScope: scope }); return;
+      }
       if (store.signedTest) {
         const sessionHash = hash(session.key);
         if (req.method === 'GET' && path === `${PREFIX}/signing`) {
@@ -240,12 +243,29 @@ export function createParticipantServer({ store, now = Date.now, bodyTimeoutMs =
       if (path === `${PREFIX}/invitations/claims` && req.method === 'POST') {
         fields(input, ['code']); send(res, 200, scoped(() => store.claimInvitation(actorId, input))); return;
       }
-      const match = new RegExp(`^${PREFIX}/deals/([^/]+)(?:/(versions|invitations|documents|events|signature-intents|anchor-intents)(?:/([^/]+))?)?$`).exec(path);
+      const match = new RegExp(`^${PREFIX}/deals/([^/]+)(?:/(versions|invitations|documents|events|reviews|reputation|evidence|signature-intents|anchor-intents)(?:/([^/]+))?)?$`).exec(path);
       if (!match || !UUID.test(match[1]) || (match[3] && !UUID.test(match[3]))) throw fail('not_found', 404);
       const [, dealId, resource, documentId] = match;
       // Shared membership check happens before body validation or any detail lookup.
       scoped(() => store.getDeal(actorId, dealId)); assertCurrent();
       if (req.method === 'GET' && !resource) { send(res, 200, { deal: scoped(() => store.getDeal(actorId, dealId)) }); return; }
+      if (req.method === 'GET' && resource === 'evidence' && !documentId) {
+        const evidence = scoped(() => store.getEvidencePackage(actorId, dealId)); assertCurrent();
+        res.setHeader('Content-Disposition', `attachment; filename="test-evidence-${dealId}.json"`);
+        send(res, 200, evidence); return;
+      }
+      if (req.method === 'GET' && resource === 'reviews') {
+        const reviews = scoped(() => store.listReviews(actorId, dealId));
+        if (documentId) {
+          const review = reviews.find(item => item.id === documentId);
+          if (!review) throw fail('not_found', 404);
+          send(res, 200, { review, scope: PARTICIPANT_REPUTATION_SCOPE, dealScope: scope });
+        } else send(res, 200, { reviews, scope: PARTICIPANT_REPUTATION_SCOPE, dealScope: scope });
+        return;
+      }
+      if (req.method === 'GET' && resource === 'reputation' && !documentId) {
+        send(res, 200, { reputation: scoped(() => store.getDealReputation(actorId, dealId)), scope: PARTICIPANT_REPUTATION_SCOPE, dealScope: scope }); return;
+      }
       if (req.method === 'GET' && resource === 'documents') {
         if (!documentId) { send(res, 200, { documents: scoped(() => store.listDocuments(actorId, dealId)), scope }); return; }
         const file = scoped(() => store.readDocument(actorId, dealId, documentId)); assertCurrent();
@@ -256,6 +276,12 @@ export function createParticipantServer({ store, now = Date.now, bodyTimeoutMs =
         res.end(file.bytes); return;
       }
       if (req.method !== 'POST' || documentId) throw fail('not_found', 404);
+      if (resource === 'reviews') {
+        fields(input, ['requestId', 'expectedVersion', 'expectedStateRevision', 'snapshotHash', 'score']);
+        const result = scoped(() => store.review(actorId, dealId, input));
+        res.setHeader('Location', `${PREFIX}/deals/${dealId}/reviews/${result.review.id}`);
+        send(res, result.historical ? 200 : 201, { ...result, scope: PARTICIPANT_REPUTATION_SCOPE, dealScope: scope }); return;
+      }
       if (store.signedTest && ['signature-intents', 'anchor-intents'].includes(resource)) {
         fields(input, resource === 'signature-intents' ? ['requestId', 'action', 'expectedVersion', 'expectedStateRevision', 'snapshotHash'] :
           ['expectedVersion', 'expectedStateRevision', 'snapshotHash']);

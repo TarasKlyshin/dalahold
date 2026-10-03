@@ -47,6 +47,19 @@ requires its own exact signed operation, a trusted private policy grant and
 durable transaction reconciliation. Execution is disabled by default; this is
 not payment/escrow or a claim of a confirmed devnet transaction.
 
+The next local TEST delivery slice adds a [permanent genuine valid/revoked SDK
+regression](.planning/spikes/022-permanent-sdk-pair/README.md), a [portable deal
+evidence package and offline checker](.planning/spikes/023-participant-evidence/README.md),
+and [durable buyer/seller role feedback](.planning/spikes/024-participant-role-reputation/README.md).
+Member-only APIs export all terms versions, exact anonymous text attachments,
+events and protected public TEST receipt links. Offline checks prove structural
+consistency only, not authenticity or current certificate status. Feedback is
+explicitly unsigned local TEST feedback even for a personal TEST signed deal,
+and only an accepted deal can earn one review per side. These capabilities are
+implemented/tested as libraries and APIs; the existing UI is unchanged and
+browser acceptance remains blocked. Retained runtimes have not been migrated
+or restarted for this slice; no push, public deployment or chain send followed.
+
 ## The problem
 
 Farmers and buyers can agree on terms across messages and documents, then disagree about what was accepted, delivered, or paid. DalaHold is exploring a shared, versioned deal record that makes each party's statements and supporting evidence visible without presenting a photo or an on-chain record as proof of physical delivery.
@@ -75,6 +88,7 @@ The first planned vertical is a livestock deal. The grain/oilseed alternative re
 - [Spike 015](.planning/spikes/015-retained-binding-checkpoint/README.md) — retained local TEST checkpoint rejects stale binding backups/clones; joint-write rollback and current restore checks pass. Not encrypted custody, full-host anti-rollback or enabled browser login.
 - [Spike 016](.planning/spikes/016-browser-personal-test/README.md) — opt-in browser personal TEST enrollment with server-issued session/CSRF and limits. SDK HTTP/negatives pass; narrow manual UAT human-confirmed with persisted/no-duplicate evidence and revision2 backup. Not identity login or corporate powers; agent UI QA and genuine renewal remain open.
 - [Spike 018](.planning/spikes/018-test-deal-workspace/README.md) — independent TEST terms/document workspace and read-only fixture evidence; exact manifest-bound personal CMS, not two-party approval or participant access.
+- [Spikes 022–024 verification](.planning/spikes/024-participant-role-reputation/VERIFICATION.md) — repeatable SDK pair gate, portable evidence API/CLI, accepted-deal role feedback and honest remaining acceptance gates.
 - [Spike 011](.planning/spikes/011-ncalayer-roundtrip/README.md) — historical browser/API stand and corrected CRL-pair gate; later TEST OCSP acceptance is recorded in Spike 012.
 - [Offline deal workflow](workflow/README.md) — test-key transfer fixture, persistent decision policy, frozen terms and a local signed-byte bridge with an internal demo record; not a browser API, NCA integration or real payment.
 - [Spike 009](.planning/spikes/009-immutable-terms-evidence/README.md) — local snapshot, same-file freshness and honestly labelled metadata/receipt record; offline only.
