@@ -81,6 +81,7 @@ export function createParticipantServer({ store, now = Date.now, bodyTimeoutMs =
   const assets = new Map([
     ['/participants/', ['web/participant.html', 'text/html; charset=utf-8']],
     ['/participants/client.mjs', ['web/participant-client.mjs', 'text/javascript; charset=utf-8']],
+    ['/participants/delivery-client.mjs', ['web/participant-delivery-client.mjs', 'text/javascript; charset=utf-8']],
     ['/participants/styles.css', ['web/participant.css', 'text/css; charset=utf-8']],
   ]);
   if (store.signedTest) {

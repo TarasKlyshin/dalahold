@@ -70,6 +70,10 @@ const ERRORS = {
   signature_organization_disabled: 'В этом режиме разрешён только личный TEST-сертификат. Полномочия организации не поддерживаются.',
   signature_identity_mismatch: 'Личный TEST-сертификат не соответствует привязке этой стороны.',
   signature_anchor_unavailable: 'Администратор не настроил отдельный кошелёк для TEST-memo в Solana devnet.',
+  feedback_required: 'Сначала загрузите текущие TEST-оценки сторон этой сделки.',
+  review_consent_required: 'Подтвердите одну неизменяемую неподписанную TEST-оценку контрагента.',
+  review_not_allowed: 'TEST-оценка доступна только после приёмки; спор не порождает рейтинг.',
+  review_already_exists: 'Ваша TEST-оценка этой сделки уже сохранена и не редактируется.',
 };
 const fail = (code, status = 0, ambiguous = false) => Object.assign(new Error(code), { code, status, ambiguous });
 const integer = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => Number.isSafeInteger(value) && value >= min && value <= max;
@@ -215,13 +219,16 @@ export function exportParticipantDeal(deal) {
 export function createParticipantController({ fetchImpl = globalThis.fetch, now = Date.now,
   randomUUID = () => globalThis.crypto.randomUUID(), onChange = () => {}, onSecret = () => {},
   cryptoImpl = globalThis.crypto, signingModuleLoader = () => import(typeof document === 'undefined' ? './participant-signing-client.mjs' : './signing-client.mjs'),
+  deliveryModuleLoader = () => import(typeof document === 'undefined' ? './participant-delivery-client.mjs' : './delivery-client.mjs'),
   signingOptions = {} } = {}) {
   let session = null, deal = null, deals = [], pending = null, busy = false, ended = false, disposed = false, generation = 0;
   let scope = PARTICIPANT_SCOPE, signingModule = null, signingReady = null, binding = null, signatureIntent = null, signatureContext = null, signatureReceipt = null;
+  let deliveryModule = null, reputation = null, reputationAt = null, feedback = null;
   let message = 'Подключение к локальному TEST-сервису…', issue = false;
   const state = () => ({ authenticated: Boolean(session?.authenticated), participant: session?.participant ? clone(session.participant) : null,
     expiresAt: session?.expiresAt ?? null, sessionReady: Boolean(session), scope,
     deal: deal ? clone(deal) : null, deals: clone(deals), busy, ended, message, issue,
+    reputation: reputation ? clone(reputation) : null, reputationAt, feedback: feedback ? clone(feedback) : null,
     pending: pending ? { kind: pending.kind, ambiguous: pending.ambiguous, dealId: pending.dealId ?? null } : null,
     ...(scope === SIGNED_PARTICIPANT_SCOPE ? { signing: {
       ready: Boolean(signingReady?.ready && signingReady.validUntil > now()), statusSource: 'test_ocsp', anchorEnabled: signingReady?.anchorEnabled === true,
@@ -235,6 +242,7 @@ export function createParticipantController({ fetchImpl = globalThis.fetch, now 
   function clearLocal(text) {
     ++generation; session = null; deal = null; deals = []; pending = null; busy = false; ended = true;
     signingReady = binding = signatureIntent = signatureContext = signatureReceipt = null;
+    reputation = feedback = null; reputationAt = null;
     onSecret(null); tell(text);
   }
   function expire() {
@@ -257,12 +265,13 @@ export function createParticipantController({ fetchImpl = globalThis.fetch, now 
     return { authenticated, csrfToken: value.csrfToken, expiresAt: value.expiresAt, scope: value.scope,
       ...(authenticated ? { participant: validateParticipant(value.participant) } : {}) };
   }
-  async function request(path, options = {}) {
+  async function request(path, options = {}, parseResponse) {
     let response;
     try { response = await fetchImpl(PARTICIPANT_API + path, { cache: 'no-store', credentials: 'same-origin', mode: 'same-origin', redirect: 'error', ...options }); }
     catch { throw fail('network_error', 0, options.method === 'POST'); }
     let value;
-    try { value = await response.json(); } catch { throw fail('invalid_response', response.status, options.method === 'POST'); }
+    try { value = response.ok && parseResponse ? await parseResponse(response) : await response.json(); }
+    catch { throw fail('invalid_response', response.status, options.method === 'POST'); }
     if (!response.ok) {
       const code = typeof value?.error?.code === 'string' ? value.error.code : 'request_failed';
       throw fail(code, response.status, options.method === 'POST' && response.status >= 500);
@@ -284,6 +293,8 @@ export function createParticipantController({ fetchImpl = globalThis.fetch, now 
         deal.stateRevision === context.deal.stateRevision && deal.snapshotHash === context.deal.snapshotHash));
   }
   const putDeal = checked => {
+    if (!deal || deal.id !== checked.id || deal.version !== checked.version || deal.stateRevision !== checked.stateRevision ||
+        deal.snapshotHash !== checked.snapshotHash) { feedback = reputation = null; reputationAt = null; }
     deal = checked; deals = [checked, ...deals.filter(item => item.id !== checked.id)];
     if (signatureContext?.deal && pending?.kind !== 'signature' && !sameSignatureContext(signatureContext)) clearPreparedSignature();
   };
@@ -319,6 +330,25 @@ export function createParticipantController({ fetchImpl = globalThis.fetch, now 
     const result = await request(`/deals/${id}`), checked = validateDeal(result?.deal, scope);
     if (checked.id !== id || !checked.participants.some(party => party.id === session?.participant?.id && party.role === checked.role)) throw fail('invalid_response');
     if (active(op)) putDeal(checked);
+  }
+  const loadDeliveryModule = async () => deliveryModule ||= await deliveryModuleLoader();
+  async function loadFeedback(op) {
+    const actorId = session.participant.id, selected = deal ? clone(deal) : null, expectedScope = scope;
+    reputation = feedback = null; reputationAt = null; emit();
+    const module = await loadDeliveryModule(); if (!active(op)) return;
+    const ownResponse = await request('/reputation'); if (!active(op)) return;
+    const own = module.validateReputationEnvelope(ownResponse, { scope: expectedScope, actorId });
+    let selectedFeedback = null;
+    if (selected) {
+      const reviews = await request(`/deals/${selected.id}/reviews`); if (!active(op)) return;
+      const parties = await request(`/deals/${selected.id}/reputation`); if (!active(op)) return;
+      selectedFeedback = module.validateDealFeedbackEnvelope(reviews, parties, selected);
+    }
+    if (active(op) && (!selected || (deal?.id === selected.id && deal.snapshotHash === selected.snapshotHash &&
+        deal.stateRevision === selected.stateRevision))) {
+      reputation = own; reputationAt = now();
+      feedback = selectedFeedback ? { ...selectedFeedback, checkedAt: reputationAt } : null;
+    }
   }
   function report(error) {
     tell(ERRORS[error?.code || error?.message] || 'Локальная TEST-операция не завершена. Проверьте соединение и повторите допустимое действие.', true);
@@ -374,6 +404,17 @@ export function createParticipantController({ fetchImpl = globalThis.fetch, now 
         pending = null; putDeal(checked);
         tell(value.historical ? 'Получена прежняя запись неподписанного TEST-заявления. Новое заявление не создано.'
           : 'Неподписанное TEST-заявление записано в локальный журнал. Это не ЭЦП и не денежная операция.'); break;
+      }
+      case 'review': {
+        if (!deliveryModule || deal?.id !== pinned.dealId) throw fail('invalid_response');
+        const result = deliveryModule.validateReviewEnvelope(value, { deal, actorId: session.participant.id, score: pinned.payload.score });
+        if (result.review.termsVersion !== pinned.payload.expectedVersion || result.review.stateRevision !== pinned.payload.expectedStateRevision ||
+            result.review.snapshotHash !== pinned.payload.snapshotHash) throw fail('invalid_response');
+        pending = null; reputation = feedback = null; reputationAt = null;
+        await detail(op, pinned.dealId); if (active(op)) await loadFeedback(op);
+        if (active(op)) tell(result.historical ? 'Получена сохранённая TEST-оценка. Новая оценка не создана.'
+          : 'Одна неподписанная TEST-оценка контрагента сохранена. Изменить её нельзя; это не ЭЦП и не доказательство деловой надёжности.');
+        break;
       }
       case 'signature-intent': {
         if (value?.scope !== SIGNED_PARTICIPANT_SCOPE || !sameSignatureContext(pinned.signatureContext)) throw fail('invalid_signature_intent');
@@ -445,7 +486,7 @@ export function createParticipantController({ fetchImpl = globalThis.fetch, now 
       } else {
         pending = null;
         if (error.status === 409 && pinned.dealId && session?.authenticated) {
-          try { await detail(op, pinned.dealId); } catch (readError) {
+          try { await detail(op, pinned.dealId); if (active(op) && pinned.kind === 'review') await loadFeedback(op); } catch (readError) {
             if (active(op) && sessionError(readError)) clearLocal('Сервер завершил TEST-сессию при обновлении данных. Данные, коды и намерение очищены. Перезагрузите страницу для входа.');
             else if (active(op)) report(readError);
           }
@@ -482,6 +523,17 @@ export function createParticipantController({ fetchImpl = globalThis.fetch, now 
       return write('login', '/session/login', { accessCode }, undefined, false);
     },
     refreshList() { return read(op => list(op), 'Список ваших TEST-сделок обновлён.'); },
+    refreshFeedback() { return read(op => loadFeedback(op), 'Загружены локальные TEST-оценки ролей. Они неподписанные и не подтверждают деловую надёжность.'); },
+    submitReview(score, consent) {
+      requireSession();
+      if (consent !== true) throw fail('review_consent_required');
+      if (!deal || deal.state !== 'accepted') throw fail('review_not_allowed');
+      if (!deliveryModule || feedback?.dealId !== deal.id || feedback.snapshotHash !== deal.snapshotHash || feedback.stateRevision !== deal.stateRevision)
+        throw fail('feedback_required');
+      if (feedback.reviews.some(review => review.authorId === session.participant.id)) throw fail('review_already_exists');
+      const payload = deliveryModule.buildReviewPayload({ deal, actorId: session.participant.id, score, requestId: randomUUID(), consent });
+      return write('review', `/deals/${deal.id}/reviews`, payload, deal.id);
+    },
     loadDeal(id) {
       if (!uuid(id)) throw fail('invalid_request');
       onSecret(null);
@@ -588,7 +640,24 @@ export function createParticipantController({ fetchImpl = globalThis.fetch, now 
       return sendPinned(pending);
     },
     exportDeal() { requireSession(); if (!deal) throw fail('invalid_request'); return exportParticipantDeal(deal); },
-    dispose() { ++generation; session = deal = pending = null; signingReady = binding = signatureIntent = signatureContext = signatureReceipt = null; deals = []; disposed = true; onSecret(null); },
+    async exportEvidence() {
+      requireSession(); if (!deal) throw fail('invalid_request');
+      const expected = { scope, actorId: session.participant.id, dealId: deal.id, role: deal.role };
+      let exported = null, exportedGeneration = null;
+      await read(async op => {
+        exportedGeneration = op;
+        const module = await loadDeliveryModule(); if (!active(op)) return;
+        const result = await request(`/deals/${expected.dealId}/evidence`, {}, response => module.readEvidenceResponse(response, expected, cryptoImpl));
+        if (!active(op)) return;
+        const checked = validateDeal(result.evidence.deal, expected.scope);
+        if (checked.id !== expected.dealId || checked.role !== expected.role ||
+            !checked.participants.some(party => party.id === expected.actorId && party.role === expected.role)) throw fail('invalid_response');
+        if (active(op)) { putDeal(checked); exported = { text: result.text, dealId: checked.id, version: checked.version }; }
+      }, 'Полный TEST-пакет получен: все версии и документы. Проверка целостности не подтверждает подлинность, текущий статус сертификата или платёж.');
+      return exportedGeneration !== null && active(exportedGeneration) ? exported : null;
+    },
+    dispose() { ++generation; session = deal = pending = null; signingReady = binding = signatureIntent = signatureContext = signatureReceipt = null;
+      reputation = feedback = null; reputationAt = null; deals = []; disposed = true; onSecret(null); },
   };
   return controller;
 }
@@ -596,11 +665,11 @@ export function createParticipantController({ fetchImpl = globalThis.fetch, now 
 export function mountParticipantCabinet(document, { fetchImpl = globalThis.fetch, now = Date.now,
   randomUUID, setIntervalImpl = globalThis.setInterval, clearIntervalImpl = globalThis.clearInterval,
   locationImpl = globalThis.location, BlobImpl = globalThis.Blob, URLImpl = globalThis.URL,
-  cryptoImpl = globalThis.crypto, signingModuleLoader, signingOptions } = {}) {
+  cryptoImpl = globalThis.crypto, signingModuleLoader, deliveryModuleLoader, signingOptions } = {}) {
   const $ = name => document.getElementById(`pp-${name}`);
   if (!$('app')) return null;
   const listeners = [], urls = new Set();
-  let current, controller, newMode = true, lastDealId = null, detailKey = '', listKey = '', actionKey = '', signatureKey = '', listButtons = [];
+  let current, controller, newMode = true, lastDealId = null, detailKey = '', listKey = '', actionKey = '', signatureKey = '', feedbackKey = '', listButtons = [];
   const element = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
   const listen = (node, event, callback) => { node.addEventListener(event, callback); listeners.push(() => node.removeEventListener(event, callback)); };
   const safe = callback => async event => { event?.preventDefault(); try { await callback(event); } catch (error) { controller.report(error); } };
@@ -634,6 +703,56 @@ export function mountParticipantCabinet(document, { fetchImpl = globalThis.fetch
       link.setAttribute('download', 'TEST-document.txt'); li.append(title, meta, digest, link); node.append(li);
     }
     if (!documents.length) emptyList(node, 'TEST-документов этой версии пока нет.');
+  }
+  function renderRoleSummary(node, value) {
+    node.replaceChildren(); if (!value) return;
+    for (const role of ROLES) {
+      const summary = value.roles[role], row = element('div');
+      row.append(element('dt', ROLE_LABELS[role]), element('dd', summary.count
+        ? `${summary.average.toLocaleString('ru-RU')} / 5 · ${summary.count} TEST-оценок` : 'Пока нет TEST-оценок'));
+      node.append(row);
+    }
+  }
+  function renderFeedback(state, blocked) {
+    $('own-reputation').hidden = !state.authenticated || state.ended;
+    $('own-reputation-status').textContent = state.reputationAt === null ? 'Оценки ещё не загружены.'
+      : `Загружено ${new Date(state.reputationAt).toLocaleTimeString('ru-RU')}. Обновите для текущих данных.`;
+    renderRoleSummary($('own-role-summary'), state.reputation);
+    for (const name of ['reputation-refresh', 'feedback-refresh']) $(name).disabled = blocked || !state.authenticated || (name === 'feedback-refresh' && !state.deal);
+    const value = state.feedback;
+    const key = value ? canonical([value.dealId, value.snapshotHash, value.stateRevision, value.checkedAt, value.reviews]) : '';
+    if (key !== feedbackKey) { feedbackKey = key; $('review-consent').checked = false; $('review-score').value = ''; }
+    $('party-reputation').replaceChildren(); $('reviews').replaceChildren();
+    if (value) {
+      for (const party of value.parties) {
+        const li = element('li'), summary = element('dl'); summary.className = 'role-summary';
+        li.append(element('strong', `${party.label} · здесь ${ROLE_LABELS[party.role].toLowerCase()}`));
+        renderRoleSummary(summary, party.reputation); li.append(summary); $('party-reputation').append(li);
+      }
+      for (const review of value.reviews) {
+        const author = state.deal.participants.find(party => party.id === review.authorId);
+        const li = element('li');
+        li.append(element('strong', `${ROLE_LABELS[review.targetRole]} · ${review.score} / 5`),
+          element('p', `Автор: ${author.label} · ${new Date(review.createdAt).toLocaleString('ru-RU')}`),
+          element('p', 'Неподписанная TEST-оценка · сохранена один раз, не редактируется'));
+        $('reviews').append(li);
+      }
+      if (!value.reviews.length) emptyList($('reviews'), 'В этой TEST-сделке ещё нет оценок.');
+    }
+    const ownReview = value?.reviews.find(review => review.authorId === state.participant?.id);
+    const eligible = Boolean(value && state.deal?.state === 'accepted' && !ownReview);
+    const target = state.deal?.participants.find(party => party.id !== state.participant?.id);
+    $('review-form').hidden = !eligible;
+    $('review-target').textContent = eligible && target ? `${target.label} · оцениваемая роль: ${ROLE_LABELS[target.role].toLowerCase()}.` : '';
+    $('feedback-status').textContent = !value ? 'Оценки ещё не загружены. Нажмите «Обновить оценки сторон».'
+      : ownReview ? 'Ваша неизменяемая TEST-оценка уже сохранена.'
+      : state.deal.state === 'accepted' ? 'TEST-приёмка завершена. Можно сохранить одну неподписанную оценку контрагента.'
+      : state.deal.state === 'disputed' ? 'TEST-спор завершён. Оценки недоступны.' : 'До TEST-приёмки новая оценка недоступна.';
+    const score = Number($('review-score').value), scoreReady = Number.isInteger(score) && score >= 1 && score <= 5;
+    $('review-score').disabled = blocked || !eligible;
+    $('review-consent').disabled = blocked || !eligible;
+    if (blocked || !eligible) $('review-consent').checked = false;
+    $('review-submit').disabled = blocked || !eligible || !scoreReady || !$('review-consent').checked;
   }
   function renderDetail(value) {
     const signed = value.scope === SIGNED_PARTICIPANT_SCOPE, labels = signed ? SIGNED_ACTION_LABELS : ACTION_LABELS;
@@ -720,7 +839,9 @@ export function mountParticipantCabinet(document, { fetchImpl = globalThis.fetch
     $('file').disabled = blocked || !state.authenticated || !$('document-consent').checked;
     $('upload').disabled = blocked || !state.authenticated || !$('document-consent').checked || !$('file').files?.length;
     $('statement').disabled = blocked || !state.authenticated || (signed ? !state.signing?.ready || !state.signing.binding : !$('statement-consent').checked);
-    $('export').disabled = blocked || !state.deal || !state.authenticated;
+    for (const name of ['export', 'evidence']) $(name).disabled = blocked || !state.deal || !state.authenticated;
+    renderFeedback(state, blocked);
+    if (!state.authenticated || state.ended) { for (const url of urls) URLImpl.revokeObjectURL(url); urls.clear(); }
     $('enroll').disabled = blocked || !signed || !state.authenticated || !state.signing?.ready || Boolean(state.signing.binding);
     $('refresh-signing').disabled = state.busy || !signed || !state.authenticated || state.ended;
     $('signing-status').textContent = signed && state.authenticated ? state.signing?.ready
@@ -784,6 +905,7 @@ export function mountParticipantCabinet(document, { fetchImpl = globalThis.fetch
     if (state.ended) { for (const name of ['create-quantity', 'create-amount', 'create-date', 'edit-quantity', 'edit-amount', 'edit-date', 'invite-id']) $(name).value = ''; $('file').value = ''; $('document-consent').checked = $('statement-consent').checked = false; }
   }
   controller = createParticipantController({ fetchImpl, now, cryptoImpl, ...(randomUUID ? { randomUUID } : {}),
+    ...(deliveryModuleLoader ? { deliveryModuleLoader } : {}),
     ...(signingModuleLoader ? { signingModuleLoader } : {}), ...(signingOptions ? { signingOptions } : {}), onChange: render, onSecret: secret });
   listen($('register'), 'click', safe(() => controller.register()));
   listen($('login-form'), 'submit', safe(() => { const value = $('access-code').value; $('access-code').value = ''; return controller.login(value); }));
@@ -794,6 +916,11 @@ export function mountParticipantCabinet(document, { fetchImpl = globalThis.fetch
   listen($('pending-reload'), 'click', () => { controller.dispose(); clearSecrets(); locationImpl.reload(); });
   listen($('refresh-list'), 'click', safe(() => controller.refreshList()));
   listen($('refresh-detail'), 'click', safe(() => controller.loadDeal(current.deal.id)));
+  listen($('reputation-refresh'), 'click', safe(() => controller.refreshFeedback()));
+  listen($('feedback-refresh'), 'click', safe(() => controller.refreshFeedback()));
+  listen($('review-score'), 'change', () => { $('review-consent').checked = false; render(controller.getState()); });
+  listen($('review-consent'), 'change', () => render(controller.getState()));
+  listen($('review-form'), 'submit', safe(() => controller.submitReview(Number($('review-score').value), $('review-consent').checked)));
   listen($('new'), 'click', () => { newMode = true; clearSecrets(); if (current.signing?.intent) controller.clearSignatureIntent(); render(controller.getState()); $('create-heading').focus(); });
   listen($('create-form'), 'submit', safe(() => controller.createDeal({ creatorRole: $('create-role').value, ...termsFromForm('create') })));
   listen($('edit-form'), 'submit', safe(() => controller.reviseDeal(termsFromForm('edit'))));
@@ -819,6 +946,12 @@ export function mountParticipantCabinet(document, { fetchImpl = globalThis.fetch
   listen($('export'), 'click', safe(() => {
     const text = controller.exportDeal(), url = URLImpl.createObjectURL(new BlobImpl([text], { type: 'application/json;charset=utf-8' }));
     urls.add(url); const link = element('a'); link.href = url; link.download = `DalaHold-TEST-${current.deal.id}.json`; document.body.append(link); link.click(); link.remove();
+  }));
+  listen($('evidence'), 'click', safe(async () => {
+    const exported = await controller.exportEvidence(); if (!exported || !current.authenticated || current.ended) return;
+    const url = URLImpl.createObjectURL(new BlobImpl([exported.text], { type: 'application/json;charset=utf-8' }));
+    urls.add(url); const link = element('a'); link.href = url; link.download = `DalaHold-TEST-evidence-${exported.dealId}.json`;
+    document.body.append(link); link.click(); link.remove();
   }));
   const timer = setIntervalImpl(() => controller.tick(), 1000);
   const initialized = controller.bootstrap();

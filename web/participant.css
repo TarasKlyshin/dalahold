@@ -92,6 +92,14 @@ summary { cursor: pointer; font-size: .85rem; color: var(--green); padding: 10px
 .member-list li { border: 1px solid var(--line); padding: 14px; min-width: 0; }
 .member-list strong { display: block; font-size: .9rem; }
 .member-list p { font-size: .82rem; margin-top: 5px; }
+.role-summary { margin: 12px 0; display: grid; gap: 10px; }
+.role-summary dt { font-size: .82rem; color: var(--muted); }
+.role-summary dd { margin: 3px 0 0; font-size: .9rem; overflow-wrap: anywhere; }
+.feedback-list > li { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.feedback-list strong { font-size: .9rem; }
+.feedback-list p { margin-top: 5px; font-size: .8rem; color: var(--muted); }
+.review-form { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 20px; max-width: 720px; }
+.review-form > select { max-width: 300px; }
 .invite-form { max-width: 620px; margin-top: 20px; }
 .invitation-secret { padding: 18px; margin-top: 16px; }
 .document-list li { padding: 14px 0; border-bottom: 1px solid #dce0d5; }

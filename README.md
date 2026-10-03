@@ -55,10 +55,17 @@ Member-only APIs export all terms versions, exact anonymous text attachments,
 events and protected public TEST receipt links. Offline checks prove structural
 consistency only, not authenticity or current certificate status. Feedback is
 explicitly unsigned local TEST feedback even for a personal TEST signed deal,
-and only an accepted deal can earn one review per side. These capabilities are
-implemented/tested as libraries and APIs; the existing UI is unchanged and
-browser acceptance remains blocked. Retained runtimes have not been migrated
-or restarted for this slice; no push, public deployment or chain send followed.
+and only an accepted deal can earn one review per side. The subsequent
+[isolated runtime and delivery UI slice](.planning/spikes/025-participant-runtime-ui/README.md)
+wires a full-package download, explicit role summaries and immutable-review
+controls into the shared client; the old JSON summary remains a separate action.
+Controller/protocol checks are not rendered browser acceptance. Approved browser
+navigation to 4177 is currently blocked by a saved user permission preference;
+there is no alternative-browser/port workaround or visual-audit pass. A fresh
+private current-code TEST runtime does not migrate/restart retained cabinets.
+Genuine two-person signing and positive same-person renewal still require
+eligible additional TEST material. No push, public deployment or chain send
+follows from this slice.
 
 ## The problem
 
@@ -89,6 +96,7 @@ The first planned vertical is a livestock deal. The grain/oilseed alternative re
 - [Spike 016](.planning/spikes/016-browser-personal-test/README.md) — opt-in browser personal TEST enrollment with server-issued session/CSRF and limits. SDK HTTP/negatives pass; narrow manual UAT human-confirmed with persisted/no-duplicate evidence and revision2 backup. Not identity login or corporate powers; agent UI QA and genuine renewal remain open.
 - [Spike 018](.planning/spikes/018-test-deal-workspace/README.md) — independent TEST terms/document workspace and read-only fixture evidence; exact manifest-bound personal CMS, not two-party approval or participant access.
 - [Spikes 022–024 verification](.planning/spikes/024-participant-role-reputation/VERIFICATION.md) — repeatable SDK pair gate, portable evidence API/CLI, accepted-deal role feedback and honest remaining acceptance gates.
+- [Spike 025 verification](.planning/spikes/025-participant-runtime-ui/VERIFICATION.md) — isolated launcher/recovery, evidence/feedback client integration and separate blocked browser/certificate acceptance gates.
 - [Spike 011](.planning/spikes/011-ncalayer-roundtrip/README.md) — historical browser/API stand and corrected CRL-pair gate; later TEST OCSP acceptance is recorded in Spike 012.
 - [Offline deal workflow](workflow/README.md) — test-key transfer fixture, persistent decision policy, frozen terms and a local signed-byte bridge with an internal demo record; not a browser API, NCA integration or real payment.
 - [Spike 009](.planning/spikes/009-immutable-terms-evidence/README.md) — local snapshot, same-file freshness and honestly labelled metadata/receipt record; offline only.

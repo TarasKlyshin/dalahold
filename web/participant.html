@@ -43,6 +43,13 @@
         <ul id="pp-deals" class="deal-list"></ul>
         <button id="pp-new" class="quiet wide" type="button">Новая TEST-сделка</button>
       </section>
+      <section id="pp-own-reputation" aria-labelledby="pp-own-reputation-heading" hidden>
+        <h2 id="pp-own-reputation-heading">Мои TEST-оценки ролей</h2>
+        <p id="pp-own-reputation-status" class="hint">Оценки ещё не загружены.</p>
+        <dl id="pp-own-role-summary" class="role-summary"></dl>
+        <button id="pp-reputation-refresh" class="quiet wide" type="button">Загрузить TEST-оценки</button>
+        <p class="hint">Неподписанные оценки внутри этого стенда. Они не подтверждают личность или деловую надёжность.</p>
+      </section>
       <form id="pp-claim-form" class="claim-block" hidden>
         <h2>Войти по приглашению</h2>
         <label for="pp-claim-code">Код TEST-приглашения</label>
@@ -187,8 +194,30 @@
           </form>
         </section>
         <section id="pp-anchor-panel" aria-labelledby="pp-anchor-heading" hidden><h2 id="pp-anchor-heading">Отдельное TEST-memo в Solana devnet</h2><p id="pp-anchor-help" class="hint">Доступно только после TEST-приёмки и настройки администратором отдельного кошелька devnet. Запись memo не переводит реальные средства и не подтверждает юридический договор.</p><button id="pp-anchor" type="button" class="quiet" disabled>Подготовить намерение TEST-memo в devnet</button></section>
+        <section id="pp-feedback-panel" aria-labelledby="pp-feedback-heading">
+          <div class="section-heading"><h2 id="pp-feedback-heading">TEST-оценки сторон</h2><button id="pp-feedback-refresh" type="button" class="quiet">Обновить оценки сторон</button></div>
+          <p class="hint">Рейтинг продавца и покупателя считается отдельно по принятым TEST-сделкам этого стенда. Даже при личной TEST-подписи сделки оценка остаётся неподписанной.</p>
+          <p id="pp-feedback-status" class="hint" aria-live="polite">Оценки ещё не загружены.</p>
+          <ul id="pp-party-reputation" class="member-list"></ul>
+          <ul id="pp-reviews" class="feedback-list"></ul>
+          <form id="pp-review-form" class="review-form" hidden>
+            <h3>Одна неизменяемая TEST-оценка</h3>
+            <p id="pp-review-target" class="hint"></p>
+            <label for="pp-review-score">Оценка контрагента от 1 до 5</label>
+            <select id="pp-review-score" required aria-describedby="pp-review-help"><option value="">Выберите оценку</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>
+            <p id="pp-review-help" class="hint">Только после TEST-приёмки, по одной оценке от каждой стороны. Редактирование недоступно. TEST-спор не порождает рейтинг.</p>
+            <label class="check" for="pp-review-consent"><input id="pp-review-consent" type="checkbox" required><span>Сохраняю одну неподписанную TEST-оценку контрагента в указанной роли этой сделки. Она не является ЭЦП, проверкой личности или гарантией исполнения.</span></label>
+            <button id="pp-review-submit" type="submit" disabled>Сохранить неподписанную TEST-оценку</button>
+          </form>
+        </section>
+        <section aria-labelledby="pp-evidence-heading">
+          <h2 id="pp-evidence-heading">Полный TEST-пакет сделки</h2>
+          <p class="hint">Все версии условий, точные TEST-тексты, журнал и публичные метаданные квитанций. Без CMS, кодов доступа, сессии и данных личности. Текст вложений не редактируется и должен оставаться анонимным.</p>
+          <button id="pp-evidence" type="button" class="quiet" aria-describedby="pp-evidence-help">Скачать полный TEST-пакет</button>
+          <p id="pp-evidence-help" class="hint">Хеши проверяют целостность файла, не подлинность или свежий статус сертификата. Offline-проверка не подтверждает договор, полномочия, поставку или платёж.</p>
+        </section>
         <section aria-labelledby="pp-journal-heading">
-          <div class="section-heading"><h2 id="pp-journal-heading">Журнал TEST-заявлений</h2><button id="pp-export" type="button" class="quiet">Экспорт этой TEST-сделки · JSON</button></div>
+          <div class="section-heading"><h2 id="pp-journal-heading">Журнал TEST-заявлений</h2><button id="pp-export" type="button" class="quiet">Скачать JSON-сводку</button></div>
           <p id="pp-journal-note" class="hint">Записи локального сервера — свидетельство TEST-последовательности. Это не ЭЦП, платёж или доказательство полномочий. Экспорт содержит только загруженную сделку, без кодов и сессии.</p>
           <ol id="pp-events" class="event-list"></ol>
         </section>
