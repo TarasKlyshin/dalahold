@@ -27,6 +27,26 @@ The existing personal binding registry is not used by this workspace. Its
 current test/runtime/UI acceptance results are recorded in Spike 018; no public
 deployment, payment or chain transaction follows from this slice.
 
+A separate [participant TEST cabinet](.planning/spikes/019-participant-test-cabinet/README.md)
+is implemented with local capability accounts, recipient-bound invitations,
+server-assigned per-deal roles and member-only documents. Its offer/agreement,
+handover/acceptance/dispute records are **unsigned TEST statements**, not NCA
+signatures or verified business authority. It uses a separate listener/database
+with no anonymous legacy draft routes; it does not upgrade existing 018 receipts
+into permissions. Genuine two-signer NCA approval and certificate renewal remain
+independent acceptance gates.
+
+The next [personal TEST signed cabinet](.planning/spikes/020-signed-participant-test/README.md)
+uses a separate listener/database: certificate-bound TEST participants, exact
+CMS instructions for each role-specific statement and protected receipts.
+Its genuine SDK, model, runtime and browser acceptance are recorded separately;
+it does not enable corporate powers or reuse the unsigned cabinet's events.
+
+A [bounded devnet TEST Memo rail](.planning/spikes/021-devnet-test-memo/README.md)
+requires its own exact signed operation, a trusted private policy grant and
+durable transaction reconciliation. Execution is disabled by default; this is
+not payment/escrow or a claim of a confirmed devnet transaction.
+
 ## The problem
 
 Farmers and buyers can agree on terms across messages and documents, then disagree about what was accepted, delivered, or paid. DalaHold is exploring a shared, versioned deal record that makes each party's statements and supporting evidence visible without presenting a photo or an on-chain record as proof of physical delivery.

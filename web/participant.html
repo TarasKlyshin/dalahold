@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="referrer" content="no-referrer">
+  <title>DalaHold — кабинет TEST-участника</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./client.mjs"></script>
+</head>
+<body>
+  <a class="skip" href="#pp-main">Перейти к рабочей области</a>
+  <header class="masthead">
+    <a class="wordmark" href="/participants/" aria-label="DalaHold, кабинет TEST-участника">DalaHold<span>Локальный TEST</span></a>
+    <p id="pp-mode-label">Кабинет участника / неподписанные заявления</p>
+  </header>
+  <div id="pp-scope-note" class="scope-note">
+    <strong>Только локальная TEST-модель.</strong>
+    Код доступа определяет локального TEST-участника. Личность, организация и полномочия человека не проверены.
+    Все действия — неподписанные TEST-заявления, без ЭЦП. Здесь нет цифрового тенге, перевода денег или реальной сделки.
+    Не вводите реальные имена, ИИН, БИН и конфиденциальные документы.
+  </div>
+  <div id="pp-app" class="cabinet" aria-busy="true">
+    <aside class="sidebar" aria-label="Участник и сделки">
+      <section class="session-block" aria-labelledby="pp-session-heading">
+        <h2 id="pp-session-heading">TEST-доступ</h2>
+        <p id="pp-participant-label">Проверяем локальную сессию…</p>
+        <div id="pp-participant-id-block" hidden>
+          <p class="field-caption">ID TEST-участника</p>
+          <code id="pp-participant-id" class="identifier"></code>
+          <p class="hint">Передайте этот ID второй стороне вручную, чтобы получить адресное приглашение. ID не подтверждает личность.</p>
+        </div>
+        <p id="pp-expiry" class="hint">TEST-сессия действует до 15 минут.</p>
+        <label id="pp-logout-warning" class="check" hidden>
+          <input id="pp-logout-ack" type="checkbox">
+          <span>Понимаю: выход удалит точный запрос из этого окна, но не отменит уже сохранённую операцию.</span>
+        </label>
+        <button id="pp-logout" type="button" class="quiet" hidden>Выйти и очистить окно</button>
+      </section>
+      <section id="pp-navigation" aria-labelledby="pp-deals-heading" hidden>
+        <div class="section-heading"><h2 id="pp-deals-heading">Мои TEST-сделки</h2><button id="pp-refresh-list" class="text-button" type="button">Обновить</button></div>
+        <ul id="pp-deals" class="deal-list"></ul>
+        <button id="pp-new" class="quiet wide" type="button">Новая TEST-сделка</button>
+      </section>
+      <form id="pp-claim-form" class="claim-block" hidden>
+        <h2>Войти по приглашению</h2>
+        <label for="pp-claim-code">Код TEST-приглашения</label>
+        <input id="pp-claim-code" type="password" required maxlength="512" autocomplete="off" spellcheck="false" aria-describedby="pp-claim-help">
+        <p id="pp-claim-help" class="hint">Приглашение должно быть адресовано вашему ID. Оно даёт локальный доступ к противоположной роли, без проверки личности или полномочий.</p>
+        <button id="pp-claim" type="submit" class="quiet wide">Принять TEST-приглашение</button>
+      </form>
+    </aside>
+    <main id="pp-main" class="work-area" tabindex="-1">
+      <p id="pp-status" class="status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Подключение к локальному TEST-сервису…</p>
+      <section id="pp-pending" class="pending-note" aria-labelledby="pp-pending-heading" hidden>
+        <h2 id="pp-pending-heading">Результат запроса пока неизвестен</h2>
+        <p id="pp-pending-note">Новые записи заблокированы. Повтор отправит тот же путь и точные байты запроса, с прежним ID.</p>
+        <button id="pp-retry" type="button">Повторить точный запрос</button>
+        <button id="pp-pending-reload" type="button" class="quiet" hidden>Очистить окно и перезагрузить</button>
+      </section>
+      <section id="pp-ended" class="paper" aria-labelledby="pp-ended-heading" hidden>
+        <h1 id="pp-ended-heading">TEST-сессия завершена</h1>
+        <p>Данные и коды очищены из окна. Выход и истечение сессии не отменяют записи сервера. Для нового входа перезагрузите страницу и введите свой код TEST-доступа.</p>
+        <button id="pp-reload" type="button">Перезагрузить для входа</button>
+      </section>
+      <section id="pp-auth" class="paper" aria-labelledby="pp-auth-heading">
+        <p class="eyebrow">01 / Локальный доступ</p>
+        <h1 id="pp-auth-heading">Вход TEST-участника</h1>
+        <p class="lede">Один TEST-участник может иметь разные роли в разных сделках. Роль назначается внутри конкретной сделки.</p>
+        <div class="auth-columns">
+          <form id="pp-login-form">
+            <h2>Уже есть доступ</h2>
+            <label for="pp-access-code">Код TEST-доступа</label>
+            <input id="pp-access-code" type="password" required maxlength="512" autocomplete="off" spellcheck="false" aria-describedby="pp-access-help">
+            <p id="pp-access-help" class="hint">Код хранится только в памяти этого окна на время запроса. Не передавайте его второй стороне.</p>
+            <button id="pp-login" type="submit">Войти в TEST-кабинет</button>
+          </form>
+          <div class="register-block">
+            <h2>Первый вход</h2>
+            <p>Создайте отдельного локального TEST-участника. Сервис выдаст случайный код доступа и технический ID.</p>
+            <button id="pp-register" type="button" class="quiet">Создать TEST-участника</button>
+          </div>
+        </div>
+      </section>
+      <section id="pp-access-secret" class="secret paper" aria-labelledby="pp-secret-heading" hidden>
+        <h2 id="pp-secret-heading">Код доступа показан один раз</h2>
+        <p>Сохраните его приватно. Это локальный bearer-код: тот, кто знает код, сможет открыть этот TEST-кабинет. Он не является документом личности. Код не попадёт в экспорт сделки.</p>
+        <label for="pp-new-access-code">Новый код TEST-доступа</label>
+        <input id="pp-new-access-code" class="secret-value" type="password" readonly autocomplete="off" spellcheck="false">
+        <button id="pp-reveal-access" type="button" class="quiet" aria-pressed="false">Показать код доступа</button>
+        <button id="pp-hide-access" type="button" class="quiet">Я сохранил(а) код — скрыть</button>
+      </section>
+      <section id="pp-signing" class="paper personal-test-signing" aria-labelledby="pp-signing-heading" hidden>
+        <h2 id="pp-signing-heading">Личный TEST-сертификат</h2>
+        <p>Подпись утверждает личную TEST-привязку к этому локальному участнику. Она не подтверждает реальный вход, организацию, деловые полномочия, юридический договор или платёж.</p>
+        <p id="pp-signing-status" class="hint"></p>
+        <p id="pp-binding-text" class="hint"></p>
+        <div id="pp-binding-metadata" hidden><p class="field-caption">ID личной TEST-привязки</p><code id="pp-binding-id" class="identifier"></code><p class="field-caption">SHA-256 TEST-сертификата</p><code id="pp-binding-digest" class="identifier"></code></div>
+        <div class="signature-buttons"><button id="pp-enroll" type="button" class="quiet">Подготовить личную TEST-привязку</button><button id="pp-refresh-signing" type="button" class="quiet">Обновить TEST-статус</button></div>
+        <div id="pp-signature-preview" class="signature-preview" hidden>
+          <h3 id="pp-intent-heading" tabindex="-1">Точное намерение личной TEST-подписи</h3>
+          <p id="pp-intent-expiry" class="hint"></p>
+          <p class="field-caption">SHA-256 точных байтов</p><code id="pp-intent-hash" class="identifier"></code>
+          <pre id="pp-intent-bytes" class="declaration" tabindex="0" aria-label="Точные байты намерения личной TEST-подписи"></pre>
+          <form id="pp-signature-form">
+            <label class="check" for="pp-signature-consent"><input id="pp-signature-consent" type="checkbox" required><span>Я просмотрел(а) точные байты и SHA-256 этого намерения. Разрешаю одну личную TEST-подпись через NCALayer. Она не даёт деловых полномочий и не разрешает юридический договор или перевод денег.</span></label>
+            <div class="signature-buttons"><button id="pp-signature-submit" type="submit" disabled>Подписать TEST-намерение через NCALayer</button><button id="pp-clear-intent" type="button" class="quiet">Очистить неподписанное намерение</button></div>
+          </form>
+        </div>
+        <div id="pp-signature-receipt" class="signature-receipt" hidden><h3>Метаданные личной TEST-квитанции</h3><pre id="pp-receipt-metadata" class="declaration"></pre></div>
+      </section>
+      <section id="pp-create" class="paper" aria-labelledby="pp-create-heading" hidden>
+        <p class="eyebrow">02 / Рабочий черновик</p>
+        <h1 id="pp-create-heading" tabindex="-1">Новая TEST-сделка</h1>
+        <p>Выберите свою роль. Вторая сторона сначала создаёт своего TEST-участника, затем получает приглашение на свой ID.</p>
+        <form id="pp-create-form" class="terms-form">
+          <div><label for="pp-create-role">Моя роль в этой сделке</label><select id="pp-create-role"><option value="seller">Продавец</option><option value="buyer">Покупатель</option></select></div>
+          <div><label for="pp-create-scenario">Сценарий</label><select id="pp-create-scenario"><option value="grain">Зерно</option><option value="livestock">Животноводство</option></select></div>
+          <div><label for="pp-create-quantity">Количество, целое число</label><input id="pp-create-quantity" type="number" min="1" max="100000" step="1" required inputmode="numeric"></div>
+          <div><label for="pp-create-amount">Демонстрационная сумма, KZT</label><input id="pp-create-amount" type="number" min="1" max="999999999999" step="1" required inputmode="numeric" aria-describedby="pp-amount-help"></div>
+          <div><label for="pp-create-date">Дата условий</label><input id="pp-create-date" type="date" required></div>
+          <p id="pp-amount-help" class="hint full">Сумма — только целое число в TEST-условиях. Платёж и резервирование средств не выполняются.</p>
+          <div class="full"><button id="pp-create-submit" type="submit">Создать TEST-черновик</button></div>
+        </form>
+      </section>
+      <article id="pp-detail" class="paper deal-detail" aria-labelledby="pp-detail-heading" hidden>
+        <div class="detail-heading"><div><p class="eyebrow">03 / Условия и журнал</p><h1 id="pp-detail-heading" tabindex="-1">TEST-сделка</h1></div><button id="pp-refresh-detail" type="button" class="quiet">Обновить данные</button></div>
+        <div class="deal-meta"><p id="pp-role" class="role-label"></p><p id="pp-state" class="state-label"></p></div>
+        <p id="pp-source-line" class="source-line">Источник: локальный сервер DalaHold · неподписанные TEST-заявления участников</p>
+        <p class="field-caption">ID TEST-сделки</p><code id="pp-deal-id" class="identifier"></code>
+        <section aria-labelledby="pp-terms-heading">
+          <div class="section-heading"><h2 id="pp-terms-heading">Текущие условия</h2><span id="pp-version" class="hint"></span></div>
+          <dl id="pp-terms" class="terms-grid"></dl>
+          <details class="technical"><summary>Точные идентификаторы условий и снимка</summary><dl><dt>SHA-256 условий</dt><dd><code id="pp-fingerprint" class="identifier"></code></dd><dt>SHA-256 снимка для заявления</dt><dd><code id="pp-snapshot-hash" class="identifier"></code></dd></dl></details>
+          <form id="pp-edit-form" class="terms-form edit-form" hidden>
+            <h3 class="full">Изменить черновик как продавец</h3>
+            <div><label for="pp-edit-scenario">Сценарий</label><select id="pp-edit-scenario"><option value="grain">Зерно</option><option value="livestock">Животноводство</option></select></div>
+            <div><label for="pp-edit-quantity">Количество, целое число</label><input id="pp-edit-quantity" type="number" min="1" max="100000" step="1" required inputmode="numeric"></div>
+            <div><label for="pp-edit-amount">Демонстрационная сумма, KZT</label><input id="pp-edit-amount" type="number" min="1" max="999999999999" step="1" required inputmode="numeric"></div>
+            <div><label for="pp-edit-date">Дата условий</label><input id="pp-edit-date" type="date" required></div>
+            <div class="full"><button id="pp-edit-submit" type="submit" class="quiet">Сохранить новую TEST-версию</button></div>
+          </form>
+          <p id="pp-immutable-note" class="hint" hidden>После TEST-предложения условия и документы этой версии неизменяемы.</p>
+        </section>
+        <section aria-labelledby="pp-members-heading">
+          <h2 id="pp-members-heading">TEST-участники и роли</h2>
+          <ul id="pp-members" class="member-list"></ul>
+          <form id="pp-invite-form" class="invite-form" hidden>
+            <label for="pp-invite-id">ID приглашённого TEST-участника</label>
+            <input id="pp-invite-id" type="text" required maxlength="36" autocomplete="off" spellcheck="false" pattern="[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}" aria-describedby="pp-invite-help">
+            <p id="pp-invite-help" class="hint">Вторая сторона сначала регистрируется и передаёт вам свой технический ID. Сервер назначит свободную противоположную роль. Приглашение действует только в этой TEST-модели.</p>
+            <button id="pp-invite" type="submit" class="quiet">Создать адресное TEST-приглашение</button>
+          </form>
+          <div id="pp-invite-secret" class="secret invitation-secret" hidden>
+            <h3>Передайте приглашение адресату вручную</h3>
+            <p>Это приватный локальный bearer-код, привязанный к указанному ID. Он не подтверждает личность или полномочия. Не публикуйте его.</p>
+            <label for="pp-new-invite-code">Код адресного TEST-приглашения</label>
+            <input id="pp-new-invite-code" class="secret-value" type="password" readonly autocomplete="off" spellcheck="false">
+            <button id="pp-reveal-invite" type="button" class="quiet" aria-pressed="false">Показать код приглашения</button>
+            <p id="pp-invite-expiry" class="hint"></p>
+            <button id="pp-hide-invite" type="button" class="quiet">Очистить код приглашения</button>
+          </div>
+        </section>
+        <section aria-labelledby="pp-documents-heading">
+          <div class="section-heading"><h2 id="pp-documents-heading">Документы текущей версии</h2><span id="pp-document-count" class="hint"></span></div>
+          <p class="hint">Только TEST-текст. Сохранённые байты и SHA-256 не подтверждают авторство, достоверность или ЭЦП.</p>
+          <ul id="pp-documents" class="document-list"></ul>
+          <form id="pp-document-form" class="document-form" hidden>
+            <div><label for="pp-category">Назначение TEST-документа</label><select id="pp-category"><option value="contract">Условия / договор</option><option value="delivery">Передача / доставка</option><option value="quality">Качество</option><option value="other">Другое</option></select></div>
+            <label class="check" for="pp-document-consent"><input id="pp-document-consent" type="checkbox"><span>Разрешаю прочитать и сохранить выбранный локальный TEST-файл. В нём нет реальных персональных данных или секретов.</span></label>
+            <div><label for="pp-file">TEST-файл .txt, UTF-8, до 256 КиБ</label><input id="pp-file" type="file" accept=".txt,text/plain" disabled aria-describedby="pp-file-help"></div>
+            <p id="pp-file-help" class="hint">Файл читается после согласия и нажатия кнопки. Имя файла не передаётся серверу.</p>
+            <button id="pp-upload" type="submit" class="quiet">Сохранить TEST-документ</button>
+          </form>
+          <details id="pp-document-history" hidden><summary>Документы предыдущих TEST-версий</summary><ul id="pp-archived-documents" class="document-list"></ul></details>
+        </section>
+        <section class="declaration-section" aria-labelledby="pp-declaration-heading">
+          <h2 id="pp-declaration-heading">Неподписанное TEST-заявление</h2>
+          <p id="pp-action-note" class="hint"></p>
+          <form id="pp-action-form" hidden>
+            <label for="pp-action">Доступное действие от моей роли</label><select id="pp-action"></select>
+            <p>Перед записью проверьте точные условия, документы и SHA-256 снимка:</p>
+            <pre id="pp-declaration" class="declaration" tabindex="0" aria-label="Точные условия неподписанного TEST-заявления"></pre>
+            <label id="pp-statement-consent-row" class="check" for="pp-statement-consent"><input id="pp-statement-consent" type="checkbox" required><span>Я просмотрел(а) эти условия и SHA-256 снимка. Записываю неподписанное TEST-заявление от своей роли, без ЭЦП и денежной операции.</span></label>
+            <button id="pp-statement" type="submit">Записать TEST-заявление (без ЭЦП)</button>
+          </form>
+        </section>
+        <section id="pp-anchor-panel" aria-labelledby="pp-anchor-heading" hidden><h2 id="pp-anchor-heading">Отдельное TEST-memo в Solana devnet</h2><p id="pp-anchor-help" class="hint">Доступно только после TEST-приёмки и настройки администратором отдельного кошелька devnet. Запись memo не переводит реальные средства и не подтверждает юридический договор.</p><button id="pp-anchor" type="button" class="quiet" disabled>Подготовить намерение TEST-memo в devnet</button></section>
+        <section aria-labelledby="pp-journal-heading">
+          <div class="section-heading"><h2 id="pp-journal-heading">Журнал TEST-заявлений</h2><button id="pp-export" type="button" class="quiet">Экспорт этой TEST-сделки · JSON</button></div>
+          <p id="pp-journal-note" class="hint">Записи локального сервера — свидетельство TEST-последовательности. Это не ЭЦП, платёж или доказательство полномочий. Экспорт содержит только загруженную сделку, без кодов и сессии.</p>
+          <ol id="pp-events" class="event-list"></ol>
+        </section>
+      </article>
+      <p id="pp-footer-note" class="footer-note">DalaHold / isolated participants v1 / local_test_participant_statements_only</p>
+    </main>
+  </div>
+</body>
+</html>
