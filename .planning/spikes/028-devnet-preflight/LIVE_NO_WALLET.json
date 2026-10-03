@@ -1,0 +1,61 @@
+{
+  "schema": "dalahold.read-only-devnet-preflight-observation.v1",
+  "runStartedUtc": "2026-10-03T19:16:49Z",
+  "resultReadBackUtc": "2026-10-03T19:17:22Z",
+  "sourceBaseline": "fc13af1ebfc61d633d3ad492ac62716892fd3b11",
+  "workingTreeModuleSha256": {
+    "signer/devnet-preflight.mjs": "fc8fd3b62d620a06527378ce567c7d282dc0a5620353597d2e9b22197516cff9",
+    "signer/solana/preflight-message.mjs": "fe8bde31c0b1f0a148b84f6651ce1a039adc58fabf01ad34d15bb843d6a89abb"
+  },
+  "cliExitCode": 0,
+  "limitation": "Time-bound public read-only observation; no wallet, key, signature, funding, simulation, transaction, execution authorization or persistent readiness.",
+  "report": {
+    "version": 1,
+    "endpoint": "https://api.devnet.solana.com",
+    "status": "PARTIAL",
+    "network": {
+      "ready": true,
+      "genesis": {
+        "status": "READY",
+        "hash": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"
+      },
+      "latestBlockhash": {
+        "status": "READY",
+        "blockhash": "BTA9uMKmTu5GJBo4bzNxCUy2odkMWjxxA6TxGsTYKd8q",
+        "lastValidBlockHeight": 494346560
+      },
+      "blockHeight": {
+        "status": "READY",
+        "value": 494346410
+      },
+      "limits": {
+        "maxRpcCalls": 5,
+        "timeoutMs": 15000,
+        "maxResponseBytes": 65536
+      }
+    },
+    "wallet": {
+      "status": "NOT CONFIGURED"
+    },
+    "balance": {
+      "status": "NOT CHECKED"
+    },
+    "fee": {
+      "status": "NOT CHECKED",
+      "maxLamports": 10000
+    },
+    "signer": {
+      "status": "NOT CONFIGURED"
+    },
+    "gates": {
+      "authority": "NOT ACCEPTED",
+      "renewal": "NOT ACCEPTED",
+      "ui": "NOT ACCEPTED",
+      "security": "NOT ACCEPTED",
+      "executionAuthorization": "NOT ACCEPTED"
+    },
+    "overallReady": false,
+    "ready": false,
+    "executionEnabled": false
+  }
+}

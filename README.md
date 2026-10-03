@@ -67,6 +67,18 @@ Genuine two-person signing and positive same-person renewal still require
 eligible additional TEST material. No push, public deployment or chain send
 follows from this slice.
 
+The next local tools provide a [one-command anonymous unsigned demo](.planning/spikes/026-reproducible-demo/README.md),
+a [bounded pre-demo security review](.planning/spikes/027-demo-security-review/REVIEW.md),
+and a [read-only devnet preflight](.planning/spikes/028-devnet-preflight/README.md).
+The demo prepares accepted/disputed deals, exact document history, both role
+reviews and full evidence in a fresh private directory; it does not produce
+NCA signatures or replace the existing listener. Its bearer codes are stored
+only in a private operator file. Preflight never loads keys or signs, funds,
+simulates or broadcasts; public-network readiness cannot enable execution.
+These are backend tools, not rendered browser acceptance or a signed two-party
+deal. Stable test and actual CLI results are recorded in the
+[026–028 verification report](.planning/spikes/026-reproducible-demo/VERIFICATION.md).
+
 ## The problem
 
 Farmers and buyers can agree on terms across messages and documents, then disagree about what was accepted, delivered, or paid. DalaHold is exploring a shared, versioned deal record that makes each party's statements and supporting evidence visible without presenting a photo or an on-chain record as proof of physical delivery.
@@ -97,6 +109,7 @@ The first planned vertical is a livestock deal. The grain/oilseed alternative re
 - [Spike 018](.planning/spikes/018-test-deal-workspace/README.md) — independent TEST terms/document workspace and read-only fixture evidence; exact manifest-bound personal CMS, not two-party approval or participant access.
 - [Spikes 022–024 verification](.planning/spikes/024-participant-role-reputation/VERIFICATION.md) — repeatable SDK pair gate, portable evidence API/CLI, accepted-deal role feedback and honest remaining acceptance gates.
 - [Spike 025 verification](.planning/spikes/025-participant-runtime-ui/VERIFICATION.md) — isolated launcher/recovery, evidence/feedback client integration and separate blocked browser/certificate acceptance gates.
+- [Spikes 026–028 verification](.planning/spikes/026-reproducible-demo/VERIFICATION.md) — reproducible unsigned demo, bounded security follow-up and read-only devnet configuration observation; no key or transaction execution.
 - [Spike 011](.planning/spikes/011-ncalayer-roundtrip/README.md) — historical browser/API stand and corrected CRL-pair gate; later TEST OCSP acceptance is recorded in Spike 012.
 - [Offline deal workflow](workflow/README.md) — test-key transfer fixture, persistent decision policy, frozen terms and a local signed-byte bridge with an internal demo record; not a browser API, NCA integration or real payment.
 - [Spike 009](.planning/spikes/009-immutable-terms-evidence/README.md) — local snapshot, same-file freshness and honestly labelled metadata/receipt record; offline only.
