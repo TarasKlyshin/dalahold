@@ -1,133 +1,101 @@
 # DalaHold
 
-Evidence-led agricultural deals in Kazakhstan, with transaction-specific e-signature approval and a Solana devnet settlement demonstration.
+A local TEST prototype for evidence-led agricultural deals in Kazakhstan: shared terms, versioned documents, participant statements and separate buyer/seller feedback.
 
-> Status: discovery, architecture planning, a clickable UX prototype, and a loopback-only API that saves versioned unsigned local deal drafts, their fingerprints and metadata-only document markers. A separate offline test policy and SQLite ledger model deal decisions with a frozen terms snapshot and internal demo record; they are not connected to the browser or a real identity provider. A separate local NCALayer/API/Java stand passes SDK-generated CMS and supervised browser signing → strict TEST OCSP → one-use test receipt, plus historical retry. Genuine bundled revoked/wrong-purpose certificates refuse without consuming the request or creating a receipt. Default CRL mode still refuses incompatible official test base/delta CRLs; there is no automatic fallback. The selected file's bytes and name are not uploaded automatically; user-entered descriptions do persist. Neither a fingerprint, marker nor this test-signature receipt proves a real user's signed deal, corporate powers or file authenticity. Stable owner binding, certificate rotation, signed two-party deals, devnet execution, live escrow, digital-tenge integration and production payments remain unimplemented or unaccepted.
+[Русская версия](docs/README.ru.md) · [Evidence and limits](docs/EVIDENCE.md) · [Weekly update: 28 September–4 October](docs/updates/2026-10-04.md)
 
-A separate opt-in [personal TEST-enrollment page](nca/README.md) now connects
-server-issued sessions/CSRF to the retained local binding registry. Genuine
-SDK-generated personal CMS passes isolated HTTP enrollment/retry/close; this is
-not authenticated account access. [Manual personal enrollment/retry/close](.planning/spikes/016-browser-personal-test/UAT.md)
-is now human-confirmed, with one durable receipt/no duplicate and a current
-revision2 backup read back independently. Agent browser QA remains blocked by
-the browser service's access-policy check; closure itself relies on the human report.
+## Problem and intended users
 
-The same page now prepares a separate [TEST certificate-replacement intent](.planning/spikes/017-browser-certificate-replacement/README.md).
-Model HTTP/client tests prove stable binding ID, next epoch, retired-credential
-refusal and one-receipt retry. Genuine bundled SDK signatures prove replacement
-negatives only. Positive genuine renewal still requires a second eligible personal
-TEST certificate; neither browser QA nor business access is accepted.
+Farmers and buyers may agree on terms across messages and documents, then struggle to establish what was accepted or delivered. This is a **problem hypothesis awaiting user validation**, not a measured market result.
 
-An independent [local TEST deal workspace](.planning/spikes/018-test-deal-workspace/README.md)
-adds a read-only operator-prepared six-event offline fixture, bounded anonymized
-UTF-8 text-file storage/downloads and a separate personal TEST CMS receipt over
-one exact terms version plus the complete document-digest manifest. Its receipt
-does not grant a buyer/seller role, approve a deal or establish file authenticity.
-The existing personal binding registry is not used by this workspace. Its
-current test/runtime/UI acceptance results are recorded in Spike 018; no public
-deployment, payment or chain transaction follows from this slice.
+DalaHold explores one shared version of the deal, explicit sources for each statement, and a clear acceptance or dispute path. The current plan starts with a livestock deal; milk and crop scenarios remain candidates for interviews.
 
-A separate [participant TEST cabinet](.planning/spikes/019-participant-test-cabinet/README.md)
-is implemented with local capability accounts, recipient-bound invitations,
-server-assigned per-deal roles and member-only documents. Its offer/agreement,
-handover/acceptance/dispute records are **unsigned TEST statements**, not NCA
-signatures or verified business authority. It uses a separate listener/database
-with no anonymous legacy draft routes; it does not upgrade existing 018 receipts
-into permissions. Genuine two-signer NCA approval and certificate renewal remain
-independent acceptance gates.
+## Current state
 
-The next [personal TEST signed cabinet](.planning/spikes/020-signed-participant-test/README.md)
-uses a separate listener/database: certificate-bound TEST participants, exact
-CMS instructions for each role-specific statement and protected receipts.
-Its genuine SDK, model, runtime and browser acceptance are recorded separately;
-it does not enable corporate powers or reuse the unsigned cabinet's events.
+Source snapshot: `01139a9`, 4 October 2026. The project is local TEST software. Full two-person signing, browser acceptance, certificate renewal, verified business authority, wallet custody and confirmed chain execution remain open.
 
-A [bounded devnet TEST Memo rail](.planning/spikes/021-devnet-test-memo/README.md)
-requires its own exact signed operation, a trusted private policy grant and
-durable transaction reconciliation. Execution is disabled by default; this is
-not payment/escrow or a claim of a confirmed devnet transaction.
+| Area | Evidence-supported status |
+|---|---|
+| Deal workflow | Anonymous unsigned TEST demo reproduces accepted and disputed deals, terms versions, exact anonymous text attachments and role feedback through the participant HTTP API. |
+| Evidence export | Full deal packages and an offline consistency checker are implemented. Checksums establish internal integrity; they do not establish authenticity, identity or physical delivery. |
+| NCA signatures | Separate genuine personal TEST-certificate verification and supervised one-person enrollment are recorded. Genuine two-person deal approval and positive certificate replacement are still missing. |
+| Recovery and access | Local isolated runtime, private member access, retries and unsigned backup/restore have scoped verification. Full browser UAT and production recovery are unaccepted. |
+| Solana | Read-only devnet preflight is implemented. The recorded network check was partial; no configured wallet or confirmed transaction is claimed. Execution is disabled by default. |
+| Demand | Interview cards and a test protocol exist. No validated demand, traction or revenue is claimed. |
 
-The next local TEST delivery slice adds a [permanent genuine valid/revoked SDK
-regression](.planning/spikes/022-permanent-sdk-pair/README.md), a [portable deal
-evidence package and offline checker](.planning/spikes/023-participant-evidence/README.md),
-and [durable buyer/seller role feedback](.planning/spikes/024-participant-role-reputation/README.md).
-Member-only APIs export all terms versions, exact anonymous text attachments,
-events and protected public TEST receipt links. Offline checks prove structural
-consistency only, not authenticity or current certificate status. Feedback is
-explicitly unsigned local TEST feedback even for a personal TEST signed deal,
-and only an accepted deal can earn one review per side. The subsequent
-[isolated runtime and delivery UI slice](.planning/spikes/025-participant-runtime-ui/README.md)
-wires a full-package download, explicit role summaries and immutable-review
-controls into the shared client; the old JSON summary remains a separate action.
-Controller/protocol checks are not rendered browser acceptance. Approved browser
-navigation to 4177 is currently blocked by a saved user permission preference;
-there is no alternative-browser/port workaround or visual-audit pass. A fresh
-private current-code TEST runtime does not migrate/restart retained cabinets.
-Genuine two-person signing and positive same-person renewal still require
-eligible additional TEST material. No push, public deployment or chain send
-follows from this slice.
+The [evidence ledger](docs/EVIDENCE.md) links each claim to its report and identifies missing acceptance. Real payments, digital tenge and production escrow are outside the completed scope.
 
-The next local tools provide a [one-command anonymous unsigned demo](.planning/spikes/026-reproducible-demo/README.md),
-a [bounded pre-demo security review](.planning/spikes/027-demo-security-review/REVIEW.md),
-and a [read-only devnet preflight](.planning/spikes/028-devnet-preflight/README.md).
-The demo prepares accepted/disputed deals, exact document history, both role
-reviews and full evidence in a fresh private directory; it does not produce
-NCA signatures or replace the existing listener. Its bearer codes are stored
-only in a private operator file. Preflight never loads keys or signs, funds,
-simulates or broadcasts; public-network readiness cannot enable execution.
-These are backend tools, not rendered browser acceptance or a signed two-party
-deal. Stable test and actual CLI results are recorded in the
-[026–028 verification report](.planning/spikes/026-reproducible-demo/VERIFICATION.md).
+## Run the unsigned demo
 
-## The problem
+Verified locally with **Node.js v22.22.2**, which provides the built-in SQLite used here. The unsigned demo needs no npm installation, NCA SDK, certificate or wallet.
 
-Farmers and buyers can agree on terms across messages and documents, then disagree about what was accepted, delivered, or paid. DalaHold is exploring a shared, versioned deal record that makes each party's statements and supporting evidence visible without presenting a photo or an on-chain record as proof of physical delivery.
+```sh
+git clone https://github.com/TarasKlyshin/dalahold.git
+cd dalahold
+node web/participant-demo.mjs --port 0
+```
 
-## Proposed MVP
+Repository access is required while it is private. This command creates fresh anonymous data, checks two evidence packages and closes its listener. It is backend preparation; it does not open a browser or create signatures.
 
-- One participant account can act as buyer or seller in different deals.
-- Both sides review and sign the same version of terms with Kazakhstan NCA e-signatures.
-- The deal records delivery claims, acceptance or dispute, payment-rail status, and separate role-based ratings.
-- For the hackathon, the signed flow runs in a desktop browser with NCALayer. A separate, restricted Solana signer can execute an approved operation on devnet; the user certificate is not a Solana private key.
-- Wallet ownership is tied to a verified person or organization, not a certificate serial number, so a verified certificate renewal should preserve the devnet address and revoke old permissions.
-- Cash/bank payments are participant-reported. Demo KZT is simulated. Solana devnet tokens have no monetary value. Real digital tenge and government integrations are outside this MVP.
+The command prints paths to `run-report.json`, `accepted-evidence.json` and `disputed-evidence.json`. Check a package with:
 
-The first planned vertical is a livestock deal. The grain/oilseed alternative remains a research track until a buyer and farmer validate its specific workflow.
+```sh
+node web/verify-participant-evidence.mjs /path/to/accepted-evidence.json
+```
 
-## Current materials
+A valid report means structural consistency only. Keep `operator-access.json` private; it contains local bearer codes.
 
-- [Project brief](PROJECT_BRIEF.md) — problem hypothesis, intended flow, clear limits, and next validation test.
-- [Implementation plan](IMPLEMENTATION_PLAN.md) — 20-day build sequence and acceptance gates.
-- [Technical prototype](TECHNICAL_PROTOTYPE.md) — exact EDS-to-Solana trust boundary, certificate rotation and mandatory negative tests; specification only, not a working integration.
-- [NCA adapter contract](NCA_ADAPTER_CONTRACT.md) — fail-closed verification interface and receipt checklist; test-signature stand passes, full identity/powers integration still pending.
-- [Local NCA test-signature stand](nca/README.md) — exact-byte CMS, one-use test receipt and strict explicit TEST OCSP using bundled test material; default CRL mode remains blocked, no personal certificate or payment.
-- [Spike 012](.planning/spikes/012-strict-test-ocsp/README.md) — strict responder trust, nonce/CertID/freshness, 47 synthetic/transport checks, genuine certificate negatives and supervised NCALayer test receipt/retry; identity, rotation, powers and independent review remain open.
-- [Spike 013](.planning/spikes/013-test-subject-identity/README.md) — internal opaque TEST person/organization mapping and genuine CMS/offline-store replacement checks; not browser enrolment, corporate authority or a real wallet.
-- [Spike 014](.planning/spikes/014-personal-binding-intents/README.md) — protected TEST mapping key, dedicated personal enrollment/replacement intents, atomic replay/retirement and backup/restart; genuine personal enrollment passes, positive renewal is synthetic only, no HTTP login or wallet.
-- [Spike 015](.planning/spikes/015-retained-binding-checkpoint/README.md) — retained local TEST checkpoint rejects stale binding backups/clones; joint-write rollback and current restore checks pass. Not encrypted custody, full-host anti-rollback or enabled browser login.
-- [Spike 016](.planning/spikes/016-browser-personal-test/README.md) — opt-in browser personal TEST enrollment with server-issued session/CSRF and limits. SDK HTTP/negatives pass; narrow manual UAT human-confirmed with persisted/no-duplicate evidence and revision2 backup. Not identity login or corporate powers; agent UI QA and genuine renewal remain open.
-- [Spike 018](.planning/spikes/018-test-deal-workspace/README.md) — independent TEST terms/document workspace and read-only fixture evidence; exact manifest-bound personal CMS, not two-party approval or participant access.
-- [Spikes 022–024 verification](.planning/spikes/024-participant-role-reputation/VERIFICATION.md) — repeatable SDK pair gate, portable evidence API/CLI, accepted-deal role feedback and honest remaining acceptance gates.
-- [Spike 025 verification](.planning/spikes/025-participant-runtime-ui/VERIFICATION.md) — isolated launcher/recovery, evidence/feedback client integration and separate blocked browser/certificate acceptance gates.
-- [Spikes 026–028 verification](.planning/spikes/026-reproducible-demo/VERIFICATION.md) — reproducible unsigned demo, bounded security follow-up and read-only devnet configuration observation; no key or transaction execution.
-- [Spike 011](.planning/spikes/011-ncalayer-roundtrip/README.md) — historical browser/API stand and corrected CRL-pair gate; later TEST OCSP acceptance is recorded in Spike 012.
-- [Offline deal workflow](workflow/README.md) — test-key transfer fixture, persistent decision policy, frozen terms and a local signed-byte bridge with an internal demo record; not a browser API, NCA integration or real payment.
-- [Spike 009](.planning/spikes/009-immutable-terms-evidence/README.md) — local snapshot, same-file freshness and honestly labelled metadata/receipt record; offline only.
-- [Clickable prototype and local unsigned-draft API](prototype/README.md) — run it locally and test both deal paths; draft terms and metadata-only markers persist, but files do not.
-- [Master plan](MASTERPLAN.md) — scope, architecture, 20-day schedule, risks, and acceptance criteria.
-- [Livestock interviews](INTERVIEW_CARDS_AGRI.md) — discussion cards for farmers and buyers.
-- [Crop interviews](INTERVIEW_CARDS_CROPS.md) — discussion cards for growers, buyers, and grain-market participants.
-- [Crop transaction research](CROP_TRANSACTIONS_RESEARCH.md) — source-bounded research and product implications.
+For a separate rendered walkthrough on an available loopback port:
 
-## Demo and submission evidence
+```sh
+node web/participant-demo.mjs --serve
+```
 
-The [Superteam pitch-deck template](https://docs.google.com/presentation/d/1V9yq8B1nLpF8vPTL2buT_nlmsMwNJ_fRuyADs_k49Sg/edit) asks builders to show a clear problem, differentiation, a working product demo, real demand evidence, use cases, the team, and a roadmap. It is a presentation template, not a GitHub repository specification. The following are **not yet completed**:
+Open <http://127.0.0.1:4177/participants/> on the same computer. Serving creates a fresh unsigned fixture and stays open until Ctrl+C. An occupied port fails; existing listeners and retained records are not replaced. Browser usability must be checked separately using the [UAT protocol](.planning/spikes/025-participant-runtime-ui/UAT.md). See [demo details](.planning/spikes/026-reproducible-demo/README.md) for permissions, retries and failure residue.
 
-- [ ] Reproducible signed two-party deal on clean test accounts.
-- [ ] Verifiable Solana devnet transaction and a documented negative test for bypassing e-signature approval.
-- [ ] Certificate-rebinding demo that retains the wallet address and rejects old authorization.
-- [ ] Product screenshots/video from the running app.
-- [ ] Interview findings and demand evidence approved for public sharing.
-- [ ] Pitch deck with verified claims, team details, and next milestones.
+## Verification
 
-No private keys, e-signature containers, passwords, personal data, or real transaction records belong in this repository.
+Recorded at the implementation snapshot: **498 default Node checks passed**, with **6 opt-in SDK groups skipped**, and **20 offline Solana checks passed**. Genuine SDK runs have separate reports. These are not browser acceptance or a security certification.
+
+Run the default checks from the repository root:
+
+```sh
+env -u NCA_SDK_ROOT node --test --test-reporter=spec \
+  web/*.test.mjs authority/*.test.mjs workflow/*.test.mjs \
+  signer/*.test.mjs nca/*.test.mjs \
+  .planning/spikes/001-order-policy/policy.test.mjs
+```
+
+Run the offline Solana suite from `signer/solana`:
+
+```sh
+node --test --test-reporter=spec
+```
+
+The documentation pass rechecked demo preparation and both offline exports; it did not rerun the full suites. Details: [latest implementation verification](.planning/spikes/026-reproducible-demo/VERIFICATION.md) and [documentation verification](docs/EVIDENCE.md#documentation-verification).
+
+## Next evidence to obtain
+
+1. Complete rendered participant UAT: documents, exports, feedback, dispute, retry and expired-session paths.
+2. Complete one exact deal with genuine TEST signatures from two different people.
+3. Demonstrate legitimate same-person certificate replacement, stable binding ID and rejection of old authorization.
+4. Test the workflow with 3–4 farmer/buyer pairs. The provisional continuation threshold is at least 3 of 4 pairs completing within 10 minutes, with at least two agreeing to a next test; otherwise simplify or narrow the workflow.
+5. After the authority, security, custody and execution-authorization gates, verify one exact devnet transaction and prepare demo media from accepted evidence.
+
+This sequence comes from the [implementation plan](IMPLEMENTATION_PLAN.md), [user-test protocol](PROJECT_BRIEF.md) and [proposed next-week focus](docs/updates/2026-10-04.md). It is not a claim that these milestones are already achieved or an approved calendar commitment.
+
+## Repository guide
+
+| Material | Purpose |
+|---|---|
+| [Project brief](PROJECT_BRIEF.md) | Users, hypothesis, first scenario and validation threshold |
+| [Implementation plan](IMPLEMENTATION_PLAN.md) / [master plan](MASTERPLAN.md) | Scope, sequence and acceptance conditions |
+| [Technical prototype](TECHNICAL_PROTOTYPE.md) | Intended signature-to-Solana trust boundary; specification |
+| [Implementation status](IMPLEMENTATION_STATUS.md) | Previous detailed README preserved from the source snapshot |
+| [Spike manifest](.planning/spikes/MANIFEST.md) | Experiments and their scoped verdicts |
+| [NCA stand](nca/README.md) | TEST signing, certificate status and enrollment boundaries |
+| [Signer](signer/README.md) | Restricted test operation and execution contracts |
+| [Interview cards](INTERVIEW_CARDS_AGRI.md) | Farmer/buyer discussions; no interview results implied |
+| [Weekly video scripts](docs/updates/2026-10-04.md) | English and Russian one-minute updates |
+
+Use anonymous TEST material. Credentials, certificate containers, private keys, local databases and real transaction records must stay outside Git. A license has not been selected; no open-source license is claimed.
