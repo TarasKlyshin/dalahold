@@ -269,7 +269,7 @@ function terms(value) {
 
 async function prepareAccepted(seller, buyer) {
   const created = expectStatus(await seller.request(`${API}/deals`, {
-    requestId: randomUUID(), creatorRole: 'seller', ...terms({ scenario: 'grain', quantity: 20, amount: 200_000, date: '2026-10-03' }),
+    requestId: randomUUID(), creatorRole: 'seller', ...terms({ scenario: 'livestock', quantity: 20, amount: 9_500_000, date: '2026-10-03' }),
   }), 201, 'accepted_create');
   let deal = created.deal;
   const invitationCode = await invite(seller, buyer, deal);
@@ -278,7 +278,7 @@ async function prepareAccepted(seller, buyer) {
     contentBase64: Buffer.from('ANONYMOUS TEST CONTRACT v1\n').toString('base64'),
   }), 201, 'accepted_document_v1');
   const revised = expectStatus(await seller.request(`${API}/deals/${deal.id}/versions`, {
-    requestId: randomUUID(), expectedVersion: 1, scenario: 'grain', quantity: 25, amount: 225_000, date: '2026-10-03',
+    requestId: randomUUID(), expectedVersion: 1, scenario: 'livestock', quantity: 20, amount: 9_786_000, date: '2026-10-03',
   }), 201, 'accepted_version');
   deal = revised.deal;
   const secondDocument = expectStatus(await seller.request(`${API}/deals/${deal.id}/documents`, {
