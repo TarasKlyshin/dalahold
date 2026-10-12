@@ -2,7 +2,7 @@
 
 A local TEST prototype for evidence-led agricultural deals in Kazakhstan: shared terms, versioned documents, participant statements and separate buyer/seller feedback.
 
-[Русская версия](docs/README.ru.md) · [Evidence and limits](docs/EVIDENCE.md) · [Weekly update: 28 September–4 October](docs/updates/2026-10-04.md)
+[Русская версия](docs/README.ru.md) · [Evidence and limits](docs/EVIDENCE.md) · [Weekly update: 5–11 October](docs/updates/2026-10-11.md)
 
 ## Problem and intended users
 
@@ -96,6 +96,6 @@ This sequence comes from the [implementation plan](IMPLEMENTATION_PLAN.md), [use
 | [NCA stand](nca/README.md) | TEST signing, certificate status and enrollment boundaries |
 | [Signer](signer/README.md) | Restricted test operation and execution contracts |
 | [Interview cards](INTERVIEW_CARDS_AGRI.md) | Farmer/buyer discussions; no interview results implied |
-| [Weekly video scripts](docs/updates/2026-10-04.md) | English and Russian one-minute updates |
+| [Weekly video scripts](docs/updates/2026-10-11.md) | English and Russian one-minute updates ([previous week](docs/updates/2026-10-04.md)) |
 
 Use anonymous TEST material. Credentials, certificate containers, private keys, local databases and real transaction records must stay outside Git. A license has not been selected; no open-source license is claimed.
